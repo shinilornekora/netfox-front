@@ -1,0 +1,1 @@
+import{u as a,j as i,B as o,aR as e}from"./index-B84afsQP.js";function r({titleId:s,on:t}){const n=a();return i.jsx(o,{"aria-pressed":t,onClick:()=>void n(e({id:s,on:!t})),children:t?"★ В списке":"☆ Смотреть позже"})}function l({titleId:s}){const t=a();return i.jsx(o,{small:!0,onClick:()=>void t(e({id:s,on:!1})),children:"Убрать"})}export{r as W,l as a};

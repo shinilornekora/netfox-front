@@ -1,0 +1,1 @@
+import{u as i,j as n,B as p,aw as u}from"./index-B84afsQP.js";function l({target:a,children:t,variant:s="primary",disabled:o,"aria-label":r}){const e=i();return n.jsx(p,{variant:s,disabled:o,"aria-label":r,onClick:()=>e(u(a)),children:t})}export{l as C};

@@ -1,0 +1,1 @@
+import{u as c,r as s}from"./index-B84afsQP.js";function o(r,t,e){const u=c(),i=JSON.stringify(e??null),n=s.useRef(e);n.current=e,s.useEffect(()=>(u(r(n.current)),()=>{t&&u(t())}),[u,r,t,i]),s.useDebugValue(i)}export{o as u};
