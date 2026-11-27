@@ -4,6 +4,12 @@
   "private": true,
   "type": "module",
   "description": "Netfox — SPA онлайн-кинотеатра: витрина, плеер, подписка и покупки, кабинет зрителя, админка каталога",
+  "sideEffects": [
+    "*.css",
+    "./src/main.tsx",
+    "./src/test/**",
+    "./src/demo/**"
+  ],
   "scripts": {
     "start": "webpack serve --config webpack/webpack.dev.cjs",
     "start:mock": "VITE_MOCK=1 webpack serve --config webpack/webpack.dev.cjs",

@@ -2,7 +2,7 @@
 // через MSW — те же обработчики, что и в интеграционных тестах. Состояние «базы»
 // сохраняется в localStorage, поэтому покупки, прогресс и вход переживают перезагрузку.
 import { createDb, db, handlers, replaceDb, type Db } from '@/test/gateway';
-import { pollDelay } from '@/features/checkout/model';
+import { pollDelay } from '@/features/checkout';
 
 const STORAGE_KEY = 'nf_demo_db_v1';
 

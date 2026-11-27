@@ -69,7 +69,7 @@ npm run coverage
 
 | Требование                                                        | Где                                                                                                                                                                                        |
 | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Роли и разный интерфейс                                           | Меню и кнопки зависят от роли (`app/Layout.tsx`, `pages/title`), гарды маршрутов `RequireAuth`, `RequireRole` (`app/guards.tsx`)                                                           |
+| Роли и разный интерфейс                                           | Меню и кнопки зависят от роли (`widgets/sidebar`, `widgets/title-hero`), гарды маршрутов `RequireAuth`, `RequireRole` (`app/guards.tsx`)                                                   |
 | Правила предметной области                                        | Смотреть можно только с правами (подписка или покупка), сериал не продаётся поштучно, 18+ требует дату рождения, админ не покупает и не смотрит, удалить можно только черновик             |
 | Создание, получение, изменение, удаление                          | Тайтлы (создать, изменить, опубликовать, снять, удалить черновик), серии (добавить, удалить), заказы (создать оплатой, вернуть), «Смотреть позже», профиль, устройства (завершить сеанс)   |
 | Фильтры, сортировка, пагинация                                    | Каталог: поиск, тип, жанр, доступ, сортировка, «Показать ещё» по `next_cursor`; история просмотров — keyset по `before`; фильтры тайтлов и заказов в админке                               |
@@ -77,6 +77,7 @@ npm run coverage
 | Маршрутизация                                                     | `createBrowserRouter` + `RouterProvider`, `errorElement`, вложенные маршруты с `Outlet`, `RoutePath`, ленивые страницы (`app/routes.tsx`)                                                  |
 | React 18, TypeScript, webpack dev/prod, ESLint + Prettier + husky | см. `package.json`, `webpack/`, `eslint.config.mjs`, `.husky/`                                                                                                                             |
 | Хуки                                                              | `useState`, `useEffect` с очисткой, `useContext`, `useCallback`, `useRef`, `useId`; свои хуки `useDebounce` (автопоиск в каталоге), `usePageModel`, `useProgressPing` в `shared/lib/hooks` |
+| Архитектура                                                       | Feature-Sliced Design: слои app/pages/widgets/features/entities/shared, публичный API слайсов, правила импорта в ESLint                                                                    |
 | Тесты                                                             | 52 юнит и 27 интеграционных, CI в `.github/workflows/ci.yml`; ручной прогон всех сценариев против настоящего бэкенда Плёнки                                                                |
 
 ## Структура репозитория
@@ -95,19 +96,37 @@ docs/backend/        архитектура, решения и замеры бэ
 
 Пути в `docs/backend` написаны для исходного репозитория Плёнки: `services/…`, `kit/…` теперь лежат в `backend/`, а `frontend/` заменён этим SPA.
 
-### Фронтенд (Feature-Sliced)
+### Фронтенд (Feature-Sliced Design)
+
+Слои сверху вниз: `app → pages → widgets → features → entities → shared`. Слой импортирует только слои ниже себя, слайсы одного слоя друг друга не видят, а в чужой слайс входят только через его публичный API — `index.ts` (`@/features/checkout`, но не `@/features/checkout/model`). Внутри слайса — сегменты `ui/`, `model.ts`, `lib/`. Правила проверяет ESLint (`@typescript-eslint/no-restricted-imports` в `eslint.config.mjs`), так что нарушение не пройдёт ни pre-commit, ни CI.
 
 ```
 src/
   app/        маршруты (createBrowserRouter), гарды ролей, layout, стили-неоморфизм;
               store.ts — Redux-стор, listeners.ts — связи между слайсами
-  pages/      страницы; рядом model.ts — слайс Redux Toolkit страницы
-  features/   checkout — окно оплаты и клиентская часть саги billing
-  entities/   session, постер и карточка тайтла
+  pages/      страницы: index.ts (React.lazy — отдельный чанк) + ui/ + model.ts (слайс страницы)
+              catalog, title, watch, plans, login, register, cabinet, profile, watchlist,
+              admin-titles, title-edit, admin-sales, not-found
+  widgets/    самостоятельные блоки страниц из фич и сущностей:
+              sidebar (меню и верхняя полоска), catalog-feed, continue-watching,
+              title-hero, episode-list, subscription-panel, purchase-list, order-list,
+              watch-history, device-list, revenue-overview, sales-orders
+  features/   действия пользователя:
+              auth (вход, регистрация, выход), catalog-filters (фильтры и автопоиск),
+              checkout (окно оплаты, сага billing), watchlist-toggle («Смотреть позже»),
+              subscription-autorenew, device-revoke, profile-edit, password-change,
+              title-moderation (опубликовать, снять, удалить), episode-editor, order-refund
+  entities/   session (кто вошёл, login/register/logout), title (постер, карточка, actionsFor)
   shared/     api (клиент + эндпоинты + типы), constants (RoutePath, pathTo), lib (в т. ч. свои хуки lib/hooks), ui-кит
   test/       MSW-gateway, фикстуры, интеграционные тесты
   demo/       демо-режим для GitHub Pages
 ```
+
+Как слои договариваются, не нарушая правил:
+
+- **Фича не знает, где её используют.** Кнопка «Смотреть позже» диспатчит `setWatch`; карточка тайтла и страница списка сами реагируют на него в своих `extraReducers` (страница может импортировать фичу, наоборот — нет).
+- **«После X перечитать Y»** — в `app/listeners.ts`, единственном слое, который видит всех: после оплаты — кошелёк и права, после автопродления — кошелёк кабинета, после завершения чужого сеанса — список устройств, после изменения серий — тайтл в редакторе, после возврата — выручка и заказы.
+- **Страница — композиция.** `pages/*/ui` собирают виджеты и фичи и передают им данные своей модели; бизнес-логика — в `model.ts` и фичах.
 
 ## Бэкенд: проверки
 
@@ -125,14 +144,15 @@ CI (`.github/workflows/ci.yml`) проверяет фронтенд (типы, �
 
 ## Состояние: Redux Toolkit
 
-Всё состояние приложения — один Redux-стор (`src/app/store.ts`), собранный `configureStore` из слайсов. Каждая страница и фича держит свой слайс в `model.ts` рядом с компонентом (Feature-Sliced):
+Всё состояние приложения — один Redux-стор (`src/app/store.ts`), собранный `configureStore` из слайсов. Слайс живёт в `model.ts` своего слайса FSD и попадает в стор через публичный API:
 
 | Слайс                                             | Файл                                                  | Что хранит                                                                      |
 | ------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------- |
 | `session`                                         | `entities/session/model.ts`                           | статус входа и профиль; thunk-и `restoreSession`, `login`, `register`, `logout` |
-| `auth`                                            | `pages/auth/model.ts`                                 | ошибки и «идёт запрос» форм входа и регистрации                                 |
+| `auth`                                            | `features/auth/model.ts`                              | ошибки и «идёт запрос» форм входа и регистрации                                 |
+| `catalogFilters`                                  | `features/catalog-filters/model.ts`                   | фильтры витрины: название, тип, жанр, доступ, сортировка                        |
 | `checkout`                                        | `features/checkout/model.ts`                          | окно оплаты: цель, карта, ключ идемпотентности, заказ, фаза                     |
-| `catalog`                                         | `pages/catalog/model.ts`                              | фильтры, лента, курсор, жанры, «Продолжить просмотр»                            |
+| `catalog`                                         | `pages/catalog/model.ts`                              | лента, курсор, жанры, «Продолжить просмотр»                                     |
 | `title`, `watch`, `plans`, `cabinet`, `watchlist` | `pages/*/model.ts`                                    | карточка, плеер, тарифы, кабинет, «Смотреть позже»                              |
 | `adminTitles`, `titleEdit`, `sales`               | `pages/admin-*/model.ts`, `pages/title-edit/model.ts` | админка                                                                         |
 
@@ -142,7 +162,8 @@ CI (`.github/workflows/ci.yml`) проверяет фронтенд (типы, �
 - **Синхронные изменения** — экшены из `createSlice` (`filterChanged`, `cardChanged`, `tabChanged`). Редьюсеры чистые: ключ идемпотентности генерируется в `prepare`, а не в редьюсере.
 - **Запросы** — `createAsyncThunk` через обёртку `createApiThunk` (`shared/lib/request.ts`): ошибка API превращается в сериализуемый `Problem` (`message`, `code`, `status`, `fields`) в `action.payload`. Типовое «данные / ошибка / загрузка» добавляет `addRequestCases`.
 - **Открытие страницы** — компонент в `useEffect` диспатчит `…Opened` (thunk, который запускает нужные запросы) и при уходе `…Closed`.
-- **Связи между слайсами** — `listenerMiddleware` (`app/listeners.ts`): после `checkout/paid` перечитываются кошелёк и права, при смене роли — данные зрителя на открытой странице.
+- **Действия-фичи без своего слайса** (`setWatch`, `autoRenewToggled`, `deviceRevoked`, `publishTitle`, `saveEpisode`, `refunded`…) — thunk-и в `features/*/model.ts`; их ошибки и «идёт запрос» показывают модели страниц через `extraReducers`.
+- **Связи между слайсами** — `listenerMiddleware` (`app/listeners.ts`): после `checkout/paid` перечитываются кошелёк и права, при смене роли — данные зрителя на открытой странице, после действий-фич — данные страниц, которые от них зависят.
 - **Тесты** — `makeStore()` создаёт новый стор на каждый тест, как отдельную вкладку браузера.
 
 ## Сессия и безопасность

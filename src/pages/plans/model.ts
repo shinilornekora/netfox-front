@@ -4,7 +4,7 @@ import { api } from '@/shared/api/endpoints';
 import type { Plan, Wallet } from '@/shared/api/types';
 import { addRequestCases, createApiThunk, idle, type RequestState } from '@/shared/lib/request';
 import type { RootState } from '@/shared/lib/redux';
-import { selectRole } from '@/entities/session/model';
+import { selectRole } from '@/entities/session';
 
 export interface PlansState {
   open: boolean;

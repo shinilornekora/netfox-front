@@ -5,7 +5,8 @@ import { api } from '@/shared/api/endpoints';
 import type { Offer, Title } from '@/shared/api/types';
 import { addRequestCases, createApiThunk, idle, problemText, type RequestState } from '@/shared/lib/request';
 import type { RootState } from '@/shared/lib/redux';
-import { selectRole } from '@/entities/session/model';
+import { selectRole } from '@/entities/session';
+import { setWatch } from '@/features/watchlist-toggle';
 
 type TitleViewerState = Awaited<ReturnType<typeof api.titleState>>;
 
@@ -31,9 +32,6 @@ const initialState: TitlePageState = {
 export const titleRequested = createApiThunk('title/title', (id: string) => api.title(id));
 export const offerRequested = createApiThunk('title/offer', (id: string) => api.offer(id));
 export const stateRequested = createApiThunk('title/state', (id: string) => api.titleState(id));
-export const setWatch = createApiThunk('title/setWatch', ({ id, on }: { id: string; on: boolean }) =>
-  api.setWatch(id, on),
-);
 
 export const titleSlice = createSlice({
   name: 'title',
@@ -46,12 +44,15 @@ export const titleSlice = createSlice({
   },
   extraReducers: (b) => {
     b.addCase(stateRequested.fulfilled, (s, a) => void (s.inWatchlist = a.payload.in_watchlist))
-      // «Смотреть позже»: переключается сразу, при ошибке откатывается.
+      // «Смотреть позже» (фича watchlist-toggle): переключается сразу, при ошибке откатывается.
+      // Реагируем только на открытый тайтл.
       .addCase(setWatch.pending, (s, a) => {
+        if (a.meta.arg.id !== s.id) return;
         s.inWatchlist = a.meta.arg.on;
         s.watchError = null;
       })
       .addCase(setWatch.rejected, (s, a) => {
+        if (a.meta.arg.id !== s.id) return;
         s.inWatchlist = !a.meta.arg.on;
         s.watchError = problemText(a);
       });
@@ -80,32 +81,7 @@ export const titleOpened = createAsyncThunk('title/opened', async (id: string, {
   await Promise.all([dispatch(titleRequested(id)), dispatch(viewerDataRequested())]);
 });
 
-export const watchToggled = createAsyncThunk(
-  'title/watchToggled',
-  async (_: void, { dispatch, getState }) => {
-    const { id, inWatchlist } = (getState() as RootState).title;
-    if (id !== null) await dispatch(setWatch({ id, on: !inWatchlist }));
-  },
-);
-
-export type Action =
-  | { type: 'watch'; via: 'subscription' | 'purchase' }
-  | { type: 'buy'; price: number }
-  | { type: 'subscribe' }
-  | { type: 'unavailable' };
-
-/** Что предложить зрителю на кнопках: смотреть, купить и/или оформить подписку. */
-export function actionsFor(t: Title, o: Offer | null): Action[] {
-  if (t.status !== 'published') return [{ type: 'unavailable' }];
-  if (o?.can_watch) return [{ type: 'watch', via: o.via ?? 'subscription' }];
-  const out: Action[] = [];
-  if (t.in_subscription && !o?.subscription_active) out.push({ type: 'subscribe' });
-  if (t.kind === 'film' && t.price_kopecks > 0 && !o?.owned)
-    out.push({ type: 'buy', price: t.price_kopecks });
-  if (out.length === 0) out.push({ type: 'unavailable' });
-  return out;
-}
-
+export const selectOpenTitleId = (s: RootState) => s.title.id;
 export const selectInWatchlist = (s: RootState) => s.title.inWatchlist;
 export const selectWatchError = (s: RootState) => s.title.watchError;
 export const selectView = createSelector(

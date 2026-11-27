@@ -1,26 +1,20 @@
 // Витрина: фильтры, сортировка и keyset-пагинация («Показать ещё» по next_cursor).
-import { createAsyncThunk, createSelector, createSlice, type PayloadAction } from '@reduxjs/toolkit';
+import { createAsyncThunk, createSelector, createSlice } from '@reduxjs/toolkit';
 import { api, type TitleQuery } from '@/shared/api/endpoints';
-import type { Genre, Kind, Progress, Title, WithTitle } from '@/shared/api/types';
+import type { Genre, Progress, Title, WithTitle } from '@/shared/api/types';
 import { addRequestCases, createApiThunk, idle, problemText, type RequestState } from '@/shared/lib/request';
 import type { RootState } from '@/shared/lib/redux';
-import { selectRole } from '@/entities/session/model';
+import { selectRole } from '@/entities/session';
+import { filtersCleared, selectFilters, type Filters } from '@/features/catalog-filters';
 
-export interface Filters {
-  q: string;
-  kind: Kind | '';
-  genre: string;
-  access: '' | 'subscription' | 'purchase';
-  sort: '' | 'new' | 'year' | 'name';
-}
+// Фильтры — у фичи catalog-filters; страница их только читает и по ним запрашивает ленту.
+export { filterChanged, initialFilters, selectFilters, type Filters } from '@/features/catalog-filters';
 
-export const initialFilters: Filters = { q: '', kind: '', genre: '', access: '', sort: '' };
 export const PAGE_SIZE = 12;
 
 export interface CatalogState {
   /** Страница открыта (аналог gate): от этого зависят реакции на смену роли. */
   open: boolean;
-  filters: Filters;
   items: Title[];
   cursor: string | null;
   pending: boolean;
@@ -32,7 +26,6 @@ export interface CatalogState {
 
 const initialState: CatalogState = {
   open: false,
-  filters: initialFilters,
   items: [],
   cursor: null,
   pending: false,
@@ -47,11 +40,12 @@ const catalog = (s: unknown) => (s as RootState).catalog;
 
 /** Первая страница по текущим фильтрам. */
 export const pageRequested = createApiThunk('catalog/page', (_: void, { getState }) =>
-  api.titles(toQuery(catalog(getState()).filters)),
+  api.titles(toQuery(selectFilters(getState() as RootState))),
 );
 /** Следующие страницы: дописываются к ленте. */
 export const nextPageRequested = createApiThunk('catalog/more', (_: void, { getState }) => {
-  const { filters, cursor } = catalog(getState());
+  const filters = selectFilters(getState() as RootState);
+  const { cursor } = catalog(getState());
   return api.titles({ ...toQuery(filters), cursor: cursor ?? undefined });
 });
 export const genresRequested = createApiThunk('catalog/genres', () => api.genres());
@@ -63,12 +57,6 @@ export const catalogSlice = createSlice({
   reducers: {
     gateOpened: (s) => void (s.open = true),
     gateClosed: (s) => void (s.open = false),
-    filterChanged(s, a: PayloadAction<Partial<Filters>>) {
-      s.filters = { ...s.filters, ...a.payload };
-    },
-    filtersCleared(s) {
-      s.filters = initialFilters;
-    },
   },
   extraReducers: (b) => {
     b.addCase(pageRequested.pending, (s) => {
@@ -99,8 +87,8 @@ export const catalogSlice = createSlice({
   },
 });
 
-export const { filterChanged, gateClosed: catalogClosed } = catalogSlice.actions;
-const { gateOpened, filtersCleared } = catalogSlice.actions;
+export const { gateClosed: catalogClosed } = catalogSlice.actions;
+const { gateOpened } = catalogSlice.actions;
 
 /** Открытие витрины: первая страница, жанры и (для зрителя) «Продолжить просмотр». */
 export const catalogOpened = createAsyncThunk('catalog/opened', async (_: void, { dispatch, getState }) => {
@@ -123,7 +111,7 @@ export const moreRequested = createAsyncThunk('catalog/showMore', async (_: void
   if (cursor !== null && !morePending) await dispatch(nextPageRequested());
 });
 
-export const selectFilters = (s: RootState) => s.catalog.filters;
+export const selectCatalogOpen = (s: RootState) => s.catalog.open;
 export const selectItems = (s: RootState) => s.catalog.items;
 export const selectHasMore = (s: RootState) => s.catalog.cursor !== null;
 export const selectGenres = createSelector(
