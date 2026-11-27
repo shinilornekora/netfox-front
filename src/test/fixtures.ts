@@ -12,7 +12,7 @@ export const users: Record<string, User & { password: string }> = {
     role: 'viewer',
     created_at: now,
     revision: 1,
-    password: 'password1',
+    password: 'password123',
   },
   // Без даты рождения: фильмы 18+ ему закрыты, пока не укажет её в профиле.
   newbie: {
@@ -23,7 +23,7 @@ export const users: Record<string, User & { password: string }> = {
     role: 'viewer',
     created_at: now,
     revision: 1,
-    password: 'password1',
+    password: 'password123',
   },
   admin: {
     id: 'u-admin',

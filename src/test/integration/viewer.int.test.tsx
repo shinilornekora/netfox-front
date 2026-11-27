@@ -170,13 +170,13 @@ describe('зритель: от витрины до просмотра', () => {
     renderApp('/cabinet/profile', { as: 'viewer' });
     const form = await screen.findByRole('form', { name: 'Смена пароля' });
     await user.type(within(form).getByLabelText('Текущий пароль'), 'wrong-one');
-    await user.type(within(form).getByLabelText('Новый пароль'), 'new-password');
+    await user.type(within(form).getByLabelText('Новый пароль'), 'new-password-2026');
     await user.click(within(form).getByRole('button', { name: 'Сменить пароль' }));
-    expect(await within(form).findByText('Неверный текущий пароль')).toBeInTheDocument();
+    expect(await within(form).findByText('Текущий пароль неверен')).toBeInTheDocument();
     await user.clear(within(form).getByLabelText('Текущий пароль'));
-    await user.type(within(form).getByLabelText('Текущий пароль'), 'password1');
+    await user.type(within(form).getByLabelText('Текущий пароль'), 'password123');
     await user.click(within(form).getByRole('button', { name: 'Сменить пароль' }));
     expect(await within(form).findByText(/Пароль изменён/)).toBeInTheDocument();
-    expect(db.users.find((u) => u.id === 'u-anna')?.password).toBe('new-password');
+    expect(db.users.find((u) => u.id === 'u-anna')?.password).toBe('new-password-2026');
   });
 });

@@ -43,8 +43,9 @@ export const $items = createStore<Title[]>([])
     return [...list, ...p.items.filter((t) => !seen.has(t.id))];
   });
 export const $cursor = createStore<string | null>(null)
-  .on(pageQuery.fx.doneData, (_, p) => p.next_cursor ?? null)
-  .on(moreQuery.fx.doneData, (_, p) => p.next_cursor ?? null);
+  // Последняя страница: gateway отдаёт next_cursor пустой строкой.
+  .on(pageQuery.fx.doneData, (_, p) => p.next_cursor || null)
+  .on(moreQuery.fx.doneData, (_, p) => p.next_cursor || null);
 export const $hasMore = $cursor.map(Boolean);
 export const $genres = genresQuery.$data.map((d) => (d?.items ?? []).filter((g) => g.count > 0));
 export const $continue = continueQuery.$data.map((d) => d?.items ?? []);

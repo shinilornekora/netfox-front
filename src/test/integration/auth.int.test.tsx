@@ -11,7 +11,7 @@ describe('вход, регистрация и гарды', () => {
     const form = await screen.findByRole('form', { name: 'Регистрация' });
     await user.type(within(form).getByLabelText('Как к вам обращаться'), 'Вера');
     await user.type(within(form).getByLabelText('Email'), 'vera@example.com');
-    await user.type(within(form).getByLabelText('Пароль'), 'password1');
+    await user.type(within(form).getByLabelText('Пароль'), 'password123');
     await user.click(within(form).getByRole('button', { name: 'Создать аккаунт' }));
     expect(await screen.findByRole('heading', { name: 'Кино, которое пережило век' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Вера' })).toBeInTheDocument();
@@ -25,9 +25,11 @@ describe('вход, регистрация и гарды', () => {
     const form = await screen.findByRole('form', { name: 'Регистрация' });
     await user.type(within(form).getByLabelText('Как к вам обращаться'), 'Анна');
     await user.type(within(form).getByLabelText('Email'), 'anna@example.com');
-    await user.type(within(form).getByLabelText('Пароль'), 'password1');
+    await user.type(within(form).getByLabelText('Пароль'), 'password123');
     await user.click(within(form).getByRole('button', { name: 'Создать аккаунт' }));
-    expect(await within(form).findAllByText('Этот email уже зарегистрирован')).toHaveLength(2);
+    expect(
+      await within(form).findByText('Этот email уже зарегистрирован — попробуйте войти'),
+    ).toBeInTheDocument();
   });
 
   it('неверный пароль — сообщение, без входа', async () => {
@@ -43,7 +45,7 @@ describe('вход, регистрация и гарды', () => {
     const user = userEvent.setup();
     renderApp('/cabinet');
     await user.type(await screen.findByLabelText('Email'), 'anna@example.com');
-    await user.type(screen.getByLabelText('Пароль'), 'password1');
+    await user.type(screen.getByLabelText('Пароль'), 'password123');
     await user.click(screen.getByRole('button', { name: 'Войти' }));
     expect(await screen.findByRole('heading', { name: 'Личный кабинет' })).toBeInTheDocument();
   });

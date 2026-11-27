@@ -65,7 +65,7 @@ export function TextArea({
   return (
     <div className="field">
       <label htmlFor={id}>{label}</label>
-      <textarea id={id} className="neu-input" {...rest} />
+      <textarea id={id} className="neu-input" aria-invalid={Boolean(error) || undefined} {...rest} />
       {error && (
         <em className="error" role="alert">
           {error}

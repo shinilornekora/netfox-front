@@ -17,8 +17,23 @@ import { Alert, Badge, Button, Card, Empty, Modal, Select, Spinner, Stat, TextAr
 export const SalesGate = createGate<void>();
 export const statusChanged = createEvent<OrderStatus | ''>();
 export const $status = createStore<OrderStatus | ''>('').on(statusChanged, (_, s) => s);
+export const plansQuery = createRequest((_: void) => api.plans());
 export const revenueQuery = createRequest((_: void) => api.revenue());
-export const ordersQuery = createRequest((s: OrderStatus | '') => api.adminOrders(s || undefined));
+export const ordersQuery = createRequest((s: OrderStatus | '') => api.adminOrders({ status: s }));
+export const moreRequested = createEvent();
+export const moreFx = createEffect((q: { status: string; before: string }) => api.adminOrders(q));
+export const $orders = createStore<Order[]>([])
+  .on(ordersQuery.fx.doneData, (_, r) => r.items)
+  .on(moreFx.doneData, (list, r) => [...list, ...r.items]);
+export const $nextBefore = createStore('')
+  .on(ordersQuery.fx.doneData, (_, r) => r.next_before)
+  .on(moreFx.doneData, (_, r) => r.next_before);
+sample({
+  clock: moreRequested,
+  source: { status: $status, before: $nextBefore },
+  filter: ({ before }) => before !== '',
+  target: moreFx,
+});
 export const refundFx = createEffect(({ id, reason }: { id: string; reason: string }) =>
   api.refundOrder(id, reason),
 );
@@ -27,14 +42,22 @@ export const $refundError = createStore<string | null>(null)
   .reset(refundFx);
 
 sample({ clock: [SalesGate.open, refundFx.done], fn: () => undefined, target: revenueQuery.start });
+sample({ clock: SalesGate.open, fn: () => undefined, target: plansQuery.start });
 sample({ clock: [SalesGate.open, statusChanged, refundFx.done], source: $status, target: ordersQuery.start });
 
 export default function SalesPage() {
   useGate(SalesGate);
+  const [loaded, more, nextBefore, plans] = useUnit([
+    ordersQuery.$data,
+    moreRequested,
+    $nextBefore,
+    plansQuery.$data,
+  ]);
+  const planName = (id?: string) => plans?.items.find((p) => p.id === id)?.name ?? id;
   const [rev, revError, orders, status, setStatus, refund, refundError] = useUnit([
     revenueQuery.$data,
     revenueQuery.$error,
-    ordersQuery.$data,
+    $orders,
     $status,
     statusChanged,
     refundFx,
@@ -95,9 +118,9 @@ export default function SalesPage() {
           </div>
         </div>
         {refundError && <Alert>{refundError}</Alert>}
-        {!orders ? (
+        {!loaded ? (
           <Spinner />
-        ) : orders.items.length === 0 ? (
+        ) : orders.length === 0 ? (
           <Empty>Заказов нет</Empty>
         ) : (
           <div className="table-wrap">
@@ -112,11 +135,11 @@ export default function SalesPage() {
                 </tr>
               </thead>
               <tbody>
-                {orders.items.map((o) => (
+                {orders.map((o) => (
                   <tr key={o.id}>
                     <td data-label="Дата">{formatDateTime(o.created_at)}</td>
                     <td data-label="Что">
-                      {o.kind === 'subscription' ? `Подписка (${o.plan_id})` : o.title_name}
+                      {o.kind === 'subscription' ? `Подписка «${planName(o.plan_id)}»` : o.title_name}
                     </td>
                     <td data-label="Сумма">{formatMoney(o.amount_kopecks)}</td>
                     <td data-label="Статус">
@@ -133,6 +156,11 @@ export default function SalesPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+        {nextBefore && (
+          <div className="row" style={{ justifyContent: 'center' }}>
+            <Button onClick={() => more()}>Показать ещё</Button>
           </div>
         )}
       </Card>

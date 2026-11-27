@@ -180,6 +180,7 @@ export default function TitleEditPage() {
             rows={4}
             value={form.description}
             onChange={(e) => set('description', e.target.value)}
+            error={fields.description}
           />
           <fieldset className="neu-inset" style={{ border: 0 }}>
             <legend className="muted" style={{ fontWeight: 700 }}>

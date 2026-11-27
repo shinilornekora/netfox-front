@@ -7,8 +7,8 @@ import { pollDelay } from '@/features/checkout/model';
 const STORAGE_KEY = 'nf_demo_db_v1';
 
 export const demoAccounts = [
-  { role: 'Зритель', email: 'anna@example.com', password: 'password1' },
-  { role: 'Зритель без даты рождения', email: 'max@example.com', password: 'password1' },
+  { role: 'Зритель', email: 'anna@example.com', password: 'password123' },
+  { role: 'Зритель без даты рождения', email: 'max@example.com', password: 'password123' },
   { role: 'Администратор', email: 'admin@plenka.local', password: 'admin12345' },
 ] as const;
 

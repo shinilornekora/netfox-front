@@ -94,7 +94,7 @@ function PasswordForm() {
           type="password"
           autoComplete="new-password"
           required
-          minLength={8}
+          minLength={10}
           value={form.new_password}
           onChange={(e) => setForm({ ...form, new_password: e.target.value })}
           error={fields.new_password}

@@ -1,9 +1,9 @@
-import { createEvent, createStore, sample } from 'effector';
+import { createEffect, createEvent, createStore, sample } from 'effector';
 import { createGate, useGate, useUnit } from 'effector-react';
 import type { FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '@/shared/api/endpoints';
-import type { TitleStatus } from '@/shared/api/types';
+import type { Title, TitleStatus } from '@/shared/api/types';
 import { createRequest } from '@/shared/lib/request';
 import { formatDateTime, formatMoney, kindLabel, titleStatusLabel } from '@/shared/lib/format';
 import { Alert, Badge, Button, Card, Empty, Select, Spinner, TextField } from '@/shared/ui';
@@ -18,6 +18,23 @@ export const $filter = createStore<{ q: string; status: TitleStatus | '' }>({ q:
 export const listQuery = createRequest((f: { q: string; status: string }) => api.adminTitles(f));
 sample({ clock: [AdminTitlesGate.open, searched], source: $filter, target: listQuery.start });
 
+// Админский список отдаётся по 50, дальше — по next_cursor.
+export const moreRequested = createEvent();
+export const moreFx = createEffect((q: { q: string; status: string; cursor: string }) => api.adminTitles(q));
+export const $items = createStore<Title[]>([])
+  .on(listQuery.fx.doneData, (_, r) => r.items)
+  .on(moreFx.doneData, (list, r) => [...list, ...r.items]);
+export const $cursor = createStore('')
+  .on(listQuery.fx.doneData, (_, r) => r.next_cursor || '')
+  .on(moreFx.doneData, (_, r) => r.next_cursor || '');
+sample({
+  clock: moreRequested,
+  source: { f: $filter, cursor: $cursor },
+  filter: ({ cursor }) => cursor !== '',
+  fn: ({ f, cursor }) => ({ ...f, cursor }),
+  target: moreFx,
+});
+
 const tone = { draft: 'info', published: 'ok', withdrawn: 'warn' } as const;
 
 export default function AdminTitlesPage() {
@@ -30,7 +47,7 @@ export default function AdminTitlesPage() {
     listQuery.$pending,
     listQuery.$error,
   ]);
-  const items = data?.items ?? [];
+  const [items, cursor, more] = useUnit([$items, $cursor, moreRequested]);
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     search();
@@ -105,6 +122,11 @@ export default function AdminTitlesPage() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+      {cursor && (
+        <div className="row" style={{ justifyContent: 'center' }}>
+          <Button onClick={() => more()}>Показать ещё</Button>
         </div>
       )}
     </div>

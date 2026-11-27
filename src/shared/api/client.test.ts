@@ -32,7 +32,11 @@ describe('HTTP-клиент', () => {
     );
     const e = await request('/ping', { method: 'POST' }).catch((x: unknown) => x);
     expect(e).toBeInstanceOf(ApiError);
-    expect(e).toMatchObject({ status: 422, code: 'invalid', message: 'Проверьте данные формы' });
+    expect(e).toMatchObject({
+      status: 422,
+      code: 'invalid',
+      message: 'Проверьте данные формы: Неверный email',
+    });
     expect((e as ApiError).fields).toEqual({ email: 'Неверный email' });
   });
 

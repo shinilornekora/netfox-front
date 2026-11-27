@@ -33,6 +33,8 @@ export default function RegisterPage() {
           <TextField
             label="Как к вам обращаться"
             required
+            minLength={2}
+            maxLength={60}
             autoComplete="nickname"
             value={form.display_name}
             onChange={set('display_name')}
@@ -51,12 +53,15 @@ export default function RegisterPage() {
             label="Пароль"
             type="password"
             required
-            minLength={8}
+            minLength={10}
             autoComplete="new-password"
             value={form.password}
             onChange={set('password')}
             error={fields.password}
           />
+          <p className="muted" style={{ fontSize: 13, marginTop: -8 }}>
+            Не короче 10 символов, буквы и цифры.
+          </p>
           <TextField
             label="Дата рождения (для фильмов 18+)"
             type="date"

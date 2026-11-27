@@ -15,6 +15,7 @@ describe('администратор: каталог и продажи', () => {
     await user.clear(within(form).getByLabelText('Год'));
     await user.type(within(form).getByLabelText('Год'), '1915');
     await user.click(within(form).getByRole('button', { name: 'детектив' }));
+    await user.type(within(form).getByLabelText('Описание'), 'Репортёр охотится за бандой «Вампиров».');
     expect(within(form).queryByLabelText(/Цена покупки/)).not.toBeInTheDocument();
     await user.click(within(form).getByRole('button', { name: 'Создать черновик' }));
 
@@ -42,9 +43,26 @@ describe('администратор: каталог и продажи', () => {
     await user.clear(within(form).getByLabelText('Год'));
     await user.type(within(form).getByLabelText('Год'), '1500');
     await user.click(within(form).getByRole('button', { name: 'Создать черновик' }));
-    expect(await within(form).findByText('Год от 1888 до 2100')).toBeInTheDocument();
+    expect(await within(form).findByText('Год — от 1895 до ближайших лет')).toBeInTheDocument();
     expect(within(form).getByLabelText('Год')).toHaveAttribute('aria-invalid', 'true');
-    expect(screen.getByText('Проверьте данные формы')).toBeInTheDocument();
+    expect(screen.getByText('Проверьте данные формы: Год — от 1895 до ближайших лет')).toBeInTheDocument();
+  });
+
+  it('публикация без описания и серий: сервер объясняет, чего не хватает', async () => {
+    const user = userEvent.setup();
+    renderApp('/admin/titles/new', { as: 'admin' });
+    const form = await screen.findByRole('form', { name: 'Карточка тайтла' });
+    await user.selectOptions(within(form).getByLabelText('Тип'), 'series');
+    await user.type(within(form).getByLabelText('Название'), 'Юдекс');
+    await user.click(within(form).getByRole('button', { name: 'Создать черновик' }));
+    await user.click(await screen.findByRole('button', { name: 'Опубликовать' }));
+    expect(
+      await screen.findByText(
+        'Проверьте данные формы: Перед публикацией добавьте описание (от 20 символов); Добавьте хотя бы одну серию',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('Описание')).toHaveAttribute('aria-invalid', 'true');
+    expect(db.titles.find((t) => t.name === 'Юдекс')?.status).toBe('draft');
   });
 
   it('снимает фильм с показа с причиной; зритель его больше не видит', async () => {

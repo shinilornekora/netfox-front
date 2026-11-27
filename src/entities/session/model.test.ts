@@ -21,7 +21,7 @@ describe('модель сессии', () => {
 
   it('логин сохраняет пользователя', async () => {
     const scope = fork();
-    await allSettled(loginFx, { scope, params: { email: 'anna@example.com', password: 'password1' } });
+    await allSettled(loginFx, { scope, params: { email: 'anna@example.com', password: 'password123' } });
     expect(scope.getState($user)?.display_name).toBe('Анна Зрителева');
     expect(db.sessionDevice).not.toBeNull();
   });
@@ -37,7 +37,7 @@ describe('модель сессии', () => {
     const scope = fork();
     await allSettled(registerFx, {
       scope,
-      params: { email: 'new@example.com', password: 'password1', display_name: 'Новый', birth_date: '' },
+      params: { email: 'new@example.com', password: 'password123', display_name: 'Новый', birth_date: '' },
     });
     expect(scope.getState($role)).toBe('viewer');
   });

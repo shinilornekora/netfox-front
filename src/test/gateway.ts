@@ -248,20 +248,31 @@ const publicOrder = ({ idem_key: _k, ...o }: Db['orders'][number]): Order => o;
 
 function validateTitle(b: TitleFields): Record<string, string> {
   const e: Record<string, string> = {};
-  if (!b.name?.trim()) e.name = 'Укажите название';
-  if (!(b.year >= 1888 && b.year <= 2100)) e.year = 'Год от 1888 до 2100';
+  if (!b.name?.trim() || b.name.length > 200) e.name = 'Название — от 1 до 200 символов';
+  if (!(b.year >= 1895 && b.year <= new Date().getFullYear() + 3)) e.year = 'Год — от 1895 до ближайших лет';
   if (![0, 6, 12, 16, 18].includes(b.age_rating))
     e.age_rating = 'Возрастной рейтинг: 0+, 6+, 12+, 16+ или 18+';
   if (b.genres.some((g) => !GENRES.includes(g))) e.genres = 'Неизвестный жанр';
   if (b.kind === 'film' && (b.duration_sec < 60 || b.duration_sec > 6 * 3600))
     e.duration_sec = 'Длительность фильма — от 1 минуты до 6 часов';
-  if (b.kind === 'series' && b.price_kopecks > 0) e.price_kopecks = 'Сериал не продаётся поштучно';
-  if (b.price_kopecks < 0) e.price_kopecks = 'Цена не может быть отрицательной';
+  if (b.genres.length > 4) e.genres = 'Не больше 4 жанров';
+  if (b.kind === 'series' && b.price_kopecks > 0) e.price_kopecks = 'Сериалы доступны только по подписке';
+  else if (b.price_kopecks < 0 || b.price_kopecks > 10_000_000) e.price_kopecks = 'Цена — от 0 до 100 000 ₽';
+  else if (b.price_kopecks > 0 && b.price_kopecks < 4900) e.price_kopecks = 'Минимальная цена покупки — 49 ₽';
   return e;
 }
 
+/** Правила пароля identity (core.Account). */
+function passwordError(pw: string, email: string): string | null {
+  if (pw.length < 10) return 'Пароль — минимум 10 символов';
+  if (pw.length > 128) return 'Пароль — не длиннее 128 символов';
+  if (!/\p{L}/u.test(pw) || !/\d/.test(pw)) return 'В пароле нужны буквы и цифры';
+  if (pw.toLowerCase() === email.toLowerCase()) return 'Пароль не должен совпадать с email';
+  return null;
+}
+
 /** Ревизия: чужая правка между чтением и сохранением → 409. */
-const stale = () => problem(409, 'stale_revision', 'Тайтл изменили в другой вкладке — обновите страницу');
+const stale = () => problem(409, 'stale', 'Тайтл изменили в другой вкладке — обновите страницу');
 
 export const handlers = [
   // ---------- identity ----------
@@ -285,13 +296,13 @@ export const handlers = [
     };
     const e: Record<string, string> = {};
     if (!/^\S+@\S+\.\S+$/.test(b.email)) e.email = 'Неверный email';
-    if (b.password.length < 8) e.password = 'Пароль — не короче 8 символов';
-    if (!b.display_name.trim()) e.display_name = 'Как к вам обращаться?';
+    const pw = passwordError(b.password, b.email);
+    if (pw) e.password = pw;
+    const dn = b.display_name.trim().length;
+    if (dn < 2 || dn > 60) e.display_name = 'Имя — от 2 до 60 символов';
     if (Object.keys(e).length) return invalid(e);
     if (db.users.some((u) => u.email === b.email.toLowerCase()))
-      return problem(409, 'email_taken', 'Этот email уже зарегистрирован', {
-        email: 'Этот email уже зарегистрирован',
-      });
+      return problem(409, 'email_taken', 'Этот email уже зарегистрирован — попробуйте войти');
     const u: DbUser = {
       id: id('u'),
       email: b.email.toLowerCase(),
@@ -316,8 +327,9 @@ export const handlers = [
     guard(request, null, async (u) => {
       const b = (await request.json()) as { display_name: string; birth_date: string; revision: number };
       if (b.revision !== u.revision)
-        return problem(409, 'stale_revision', 'Профиль изменили на другом устройстве — обновите страницу');
-      if (!b.display_name.trim()) return invalid({ display_name: 'Как к вам обращаться?' });
+        return problem(409, 'stale', 'Профиль изменён на другом устройстве — обновите страницу');
+      const dn = b.display_name.trim().length;
+      if (dn < 2 || dn > 60) return invalid({ display_name: 'Имя — от 2 до 60 символов' });
       Object.assign(u, {
         display_name: b.display_name.trim(),
         birth_date: b.birth_date || null,
@@ -329,8 +341,9 @@ export const handlers = [
   http.post(`${API}/me/password`, ({ request }) =>
     guard(request, null, async (u) => {
       const b = (await request.json()) as { current_password: string; new_password: string };
-      if (b.current_password !== u.password) return invalid({ current_password: 'Неверный текущий пароль' });
-      if (b.new_password.length < 8) return invalid({ new_password: 'Пароль — не короче 8 символов' });
+      if (b.current_password !== u.password) return invalid({ current_password: 'Текущий пароль неверен' });
+      const pw = passwordError(b.new_password, u.email);
+      if (pw) return invalid({ new_password: pw });
       u.password = b.new_password;
       // Смена пароля завершает сессии на других устройствах.
       db.devices = db.devices.filter((d) => d.user_id !== u.id || d.id === db.sessionDevice);
@@ -452,7 +465,11 @@ export const handlers = [
       const t = titleById(String(params.id));
       if (!t) return notFound('Тайтл');
       if (t.status !== 'draft')
-        return problem(409, 'not_draft', 'Удалить можно только черновик — опубликованный снимите с показа');
+        return problem(
+          409,
+          'not_draft',
+          'Удалить можно только черновик — опубликованный тайтл снимите с показа',
+        );
       db.titles = db.titles.filter((x) => x !== t);
       return noContent();
     }),
@@ -463,8 +480,14 @@ export const handlers = [
       if (!t) return notFound('Тайтл');
       const { revision } = (await request.json()) as { revision: number };
       if (revision !== t.revision) return stale();
-      if (!t.in_subscription && t.price_kopecks <= 0)
-        return problem(409, 'no_access', 'Перед публикацией включите тайтл в подписку или назначьте цену');
+      // readiness (catalog core.Title): что мешает опубликовать.
+      const e: Record<string, string> = {};
+      if ([...t.description].length < 20)
+        e.description = 'Перед публикацией добавьте описание (от 20 символов)';
+      if (!t.in_subscription && t.price_kopecks === 0)
+        e.in_subscription = 'Включите подписку или задайте цену покупки';
+      if (t.kind === 'series' && !t.episodes?.length) e.episodes = 'Добавьте хотя бы одну серию';
+      if (Object.keys(e).length) return invalid(e);
       Object.assign(t, {
         status: 'published',
         withdraw_reason: undefined,
@@ -481,7 +504,8 @@ export const handlers = [
       if (!t) return notFound('Тайтл');
       const b = (await request.json()) as { revision: number; reason: string };
       if (b.revision !== t.revision) return stale();
-      if (!b.reason?.trim()) return invalid({ reason: 'Укажите причину — её увидят зрители' });
+      const len = (b.reason ?? '').trim().length;
+      if (len < 3 || len > 300) return invalid({ reason: 'Укажите причину (3–300 символов)' });
       Object.assign(t, {
         status: 'withdrawn',
         withdraw_reason: b.reason.trim(),
@@ -495,12 +519,12 @@ export const handlers = [
     guard(request, ['admin'], async () => {
       const t = titleById(String(params.id));
       if (!t) return notFound('Тайтл');
-      if (t.kind !== 'series') return problem(409, 'not_series', 'Серии бывают только у сериала');
+      if (t.kind !== 'series') return problem(409, 'not_series', 'Серии бывают только у сериалов');
       const b = (await request.json()) as Partial<Episode>;
       if (!b.name?.trim()) return invalid({ name: 'Укажите название серии' });
       const eps = (t.episodes ??= []);
       if (eps.some((e) => e.id !== b.id && e.season === b.season && e.number === b.number))
-        return invalid({ number: 'Такая серия в этом сезоне уже есть' });
+        return problem(409, 'episode_exists', `Серия ${b.season}×${b.number} уже есть`);
       let ep = eps.find((e) => e.id === b.id);
       if (ep) Object.assign(ep, b);
       else {
@@ -523,6 +547,8 @@ export const handlers = [
     guard(request, ['admin'], () => {
       const t = titleById(String(params.id));
       if (!t) return notFound('Тайтл');
+      if (t.status === 'published' && (t.episodes ?? []).length <= 1)
+        return problem(409, 'last_episode', 'У опубликованного сериала должна остаться хотя бы одна серия');
       t.episodes = (t.episodes ?? []).filter((e) => e.id !== params.eid);
       t.episode_count = t.episodes.length;
       return noContent();
@@ -650,12 +676,16 @@ export const handlers = [
   ),
   http.get(`${API}/billing/admin/orders`, ({ request }) =>
     guard(request, ['admin'], () => {
-      const status = new URL(request.url).searchParams.get('status');
-      const items = db.orders
+      const p = new URL(request.url).searchParams;
+      const status = p.get('status');
+      const before = p.get('before');
+      const all = db.orders
         .filter((o) => !status || o.status === status)
-        .sort((a, b) => b.created_at.localeCompare(a.created_at))
-        .map(publicOrder);
-      return HttpResponse.json({ items });
+        .filter((o) => !before || o.created_at < before)
+        .sort((a, b) => b.created_at.localeCompare(a.created_at));
+      const page = all.slice(0, 30);
+      const next = page.length === 30 ? page[29]!.created_at : '';
+      return HttpResponse.json({ items: page.map(publicOrder), next_before: next });
     }),
   ),
   http.post(`${API}/billing/admin/orders/:id/refund`, ({ request, params }) =>

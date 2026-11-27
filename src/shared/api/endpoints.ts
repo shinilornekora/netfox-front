@@ -108,8 +108,9 @@ export const api = {
   autoRenew: (enabled: boolean) =>
     request<void>('/billing/subscription/auto-renew', { method: 'POST', body: { enabled } }),
   offer: (titleId: string) => request<Offer>(`/billing/offers/${enc(titleId)}`),
-  adminOrders: (status?: string) =>
-    request<{ items: Order[] }>('/billing/admin/orders', { query: { status } }),
+  /** По 30 заказов, следующая страница — по next_before (created_at последнего). */
+  adminOrders: (q: { status?: string; before?: string }) =>
+    request<{ items: Order[]; next_before: string }>('/billing/admin/orders', { query: q }),
   refundOrder: (id: string, reason: string) =>
     request<Order>(`/billing/admin/orders/${enc(id)}/refund`, { method: 'POST', body: { reason } }),
   revenue: () => request<Revenue>('/billing/admin/revenue'),

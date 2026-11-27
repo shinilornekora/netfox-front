@@ -57,9 +57,16 @@ function isProblem(b: unknown): b is Problem {
   return typeof b === 'object' && b !== null && 'code' in b && 'title' in b;
 }
 
-/** Текст ошибки для человека: «Заголовок. Подробности». */
+/**
+ * Текст ошибки для человека: «Заголовок. Подробности». У 422 сервер кладёт
+ * причины в errors по полям; не у каждого поля есть место в форме
+ * (например, «Добавьте хотя бы одну серию» при публикации), поэтому
+ * причины дописываются в сам текст.
+ */
 export function problemText(p: Problem): string {
-  return p.detail ? `${p.title}. ${p.detail}` : p.title;
+  const base = p.detail ? `${p.title}. ${p.detail}` : p.title;
+  const reasons = Object.values(p.errors ?? {});
+  return reasons.length ? `${base}: ${reasons.join('; ')}` : base;
 }
 
 export interface RawResponse<T> {

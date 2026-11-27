@@ -1,6 +1,6 @@
 # Netfox — фронтенд онлайн-кинотеатра
 
-**Демо:** https://shinilornekora.github.io/netfox-front/ (бэкенд эмулируется в браузере, входы: `anna@example.com` / `password1`, `max@example.com` / `password1`, `admin@plenka.local` / `admin12345`)
+**Демо:** https://shinilornekora.github.io/netfox-front/ (бэкенд эмулируется в браузере, входы: `anna@example.com` / `password123`, `max@example.com` / `password123`, `admin@plenka.local` / `admin12345`)
 
 SPA онлайн-кинотеатра с двумя ролями: **зритель** и **администратор**.
 Бэкенд — микросервисы [Плёнки](https://github.com/shinilornekora/plenka) (gateway, identity, catalog, billing, playback); фронт ходит только в `gateway` по `/api`.
@@ -37,14 +37,14 @@ npm run build:pages    # демо-сборка для GitHub Pages
 ## Тесты
 
 ```bash
-npm test                    # все тесты (71)
+npm test                    # все тесты (72)
 npm run test:unit           # юнит: модели Effector, HTTP-клиент, утилиты, UI-кит
 npm run test:integration    # интеграционные: всё приложение против фейкового gateway
 npm run coverage
 ```
 
 - **Юнит-тесты** (`*.test.ts(x)` рядом с кодом) проверяют модели Effector в изолированном `fork()`-scope через `allSettled`: сессию по cookie, витрину с фильтрами и курсорной пагинацией без дублей, кнопки доступа на карточке, оптимистичное «Смотреть позже» с откатом, плеер (402, 403 для 18+, дедупликация пингов), оплату (201, 402 как результат, 202 с опросом, новый ключ после отказа, повтор с тем же ключом без второго заказа), HTTP-клиент (CSRF-заголовок, разбор problem+json, сеть, 401).
-- **Интеграционные тесты** (`src/test/integration/*.int.test.tsx`) рендерят приложение целиком (роутер + Effector + UI) и проходят сценарии гостя, зрителя и администратора. Сеть подменяет MSW: `src/test/gateway.ts` — in-memory gateway с теми же контрактами, что у сервисов Плёнки.
+- **Интеграционные тесты** (`src/test/integration/*.int.test.tsx`) рендерят приложение целиком (роутер + Effector + UI) и проходят сценарии гостя, зрителя и администратора. Сеть подменяет MSW: `src/test/gateway.ts` — in-memory gateway с теми же контрактами, что у сервисов Плёнки, включая правила валидации (пароль от 10 символов с буквами и цифрами, готовность к публикации, цены) и тексты ошибок.
 
 ## Соответствие требованиям курсовой
 
@@ -57,7 +57,7 @@ npm run coverage
 | Страницы                                                          | Регистрация, вход, 404, «нет доступа» и страница ошибки роутера, каталог, карточка, плеер, тарифы, личный кабинет, профиль, «Смотреть позже», админка каталога, редактор, продажи        |
 | Маршрутизация                                                     | `createBrowserRouter` + `RouterProvider`, `errorElement`, вложенные маршруты с `Outlet`, `RoutePath`, ленивые страницы (`app/routes.tsx`)                                                |
 | React 18, TypeScript, webpack dev/prod, ESLint + Prettier + husky | см. `package.json`, `webpack/`, `eslint.config.mjs`, `.husky/`                                                                                                                           |
-| Тесты                                                             | 46 юнит и 25 интеграционных, CI в `.github/workflows/ci.yml`                                                                                                                             |
+| Тесты                                                             | 46 юнит и 26 интеграционных, CI в `.github/workflows/ci.yml`; ручной прогон всех сценариев против настоящего бэкенда Плёнки                                                              |
 
 ## Структура (Feature-Sliced)
 

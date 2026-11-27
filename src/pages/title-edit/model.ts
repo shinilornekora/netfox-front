@@ -45,8 +45,10 @@ export const $error = createStore<string | null>(null)
   )
   .reset(EditGate.close, ...mutations);
 export const $fields = createStore<Record<string, string>>({})
-  .on([createFx.failData, saveFx.failData, saveEpisodeFx.failData], (_, e) => errorFields(e))
-  .reset(EditGate.close, createFx, saveFx, saveEpisodeFx);
+  .on([createFx.failData, saveFx.failData, publishFx.failData, saveEpisodeFx.failData], (_, e) =>
+    errorFields(e),
+  )
+  .reset(EditGate.close, createFx, saveFx, publishFx, saveEpisodeFx);
 export const $notice = createStore<string | null>(null)
   .on(messageShown, (_, m) => m)
   .on(saveFx.done, () => 'Сохранено')
