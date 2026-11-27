@@ -1,0 +1,38 @@
+EXPLAIN ленты «Продолжить» под ролью playback с контекстом RLS
+SET
+SET
+BEGIN
+              set_config              
+--------------------------------------
+ 1c2d7548-a47d-4890-a791-066f9cba6536
+(1 row)
+
+                                                       QUERY PLAN                                                        
+-------------------------------------------------------------------------------------------------------------------------
+ Limit (actual time=0.068..0.070 rows=1 loops=1)
+   Buffers: shared hit=7
+   ->  Sort (actual time=0.068..0.069 rows=1 loops=1)
+         Sort Key: p.updated_at DESC
+         Sort Method: quicksort  Memory: 25kB
+         Buffers: shared hit=7
+         ->  Hash Join (actual time=0.041..0.046 rows=1 loops=1)
+               Hash Cond: (t.id = p.title_id)
+               Buffers: shared hit=4
+               ->  Seq Scan on title_replica t (actual time=0.006..0.009 rows=16 loops=1)
+                     Filter: (status = 'published'::text)
+                     Rows Removed by Filter: 5
+                     Buffers: shared hit=1
+               ->  Hash (actual time=0.024..0.024 rows=1 loops=1)
+                     Buckets: 1024  Batches: 1  Memory Usage: 9kB
+                     Buffers: shared hit=3
+                     ->  Index Scan using progress_continue_idx on progress p (actual time=0.019..0.020 rows=1 loops=1)
+                           Index Cond: (user_id = '1c2d7548-a47d-4890-a791-066f9cba6536'::uuid)
+                           Filter: ((user_id)::text = COALESCE(current_setting('plenka.user_id'::text, true), ''::text))
+                           Buffers: shared hit=3
+ Planning:
+   Buffers: shared hit=282 dirtied=1
+ Planning Time: 0.697 ms
+ Execution Time: 0.107 ms
+(24 rows)
+
+ROLLBACK

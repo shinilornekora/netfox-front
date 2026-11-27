@@ -1,0 +1,147 @@
+# Netfox целиком одной командой из корня репозитория:
+#
+#   docker compose up -d --build
+#
+# Поднимает PostgreSQL, Kafka, пять сервисов бэкенда, фронтенд (nginx на :8080)
+# и один раз наполняет каталог (сервис seed). Сайт: http://localhost:8080
+name: netfox
+
+x-svc: &svc
+  restart: unless-stopped
+  depends_on:
+    dbinit: { condition: service_completed_successfully }
+    kafka: { condition: service_healthy }
+
+x-env: &env
+  INTERNAL_KEY: ${INTERNAL_KEY:-dev-internal-key-change-me}
+  KAFKA_BROKERS: kafka:9092
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: plenka
+      POSTGRES_USER: plenka
+      POSTGRES_PASSWORD: plenka
+    volumes:
+      - ./deploy/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "plenka"]
+      interval: 2s
+      retries: 30
+    ports: ["5433:5432"]
+
+  # Роли и схемы при каждом запуске (init.sql идемпотентен): в базе, созданной
+  # до появления ролей данных, они тоже появятся.
+  dbinit:
+    image: postgres:16-alpine
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      PGPASSWORD: plenka
+    volumes:
+      - ./deploy/init.sql:/init.sql:ro
+    command: ["psql", "-h", "postgres", "-U", "plenka", "-d", "plenka", "-v", "ON_ERROR_STOP=1", "-q", "-f", "/init.sql"]
+    restart: "no"
+
+  kafka:
+    image: apache/kafka:3.9.1
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      interval: 5s
+      retries: 30
+
+  identity:
+    <<: *svc
+    build: { context: ./backend, args: { SERVICE: identity } }
+    environment:
+      <<: *env
+      DATABASE_URL: postgres://identity:identity_pw@postgres:5432/plenka?sslmode=disable
+      APP_DATABASE_URL: postgres://identity_app:identity_app_pw@postgres:5432/plenka?sslmode=disable
+      GRPC_ADDR: ":9090"
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@plenka.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin12345}
+
+  catalog:
+    <<: *svc
+    build: { context: ./backend, args: { SERVICE: catalog } }
+    environment:
+      <<: *env
+      DATABASE_URL: postgres://catalog:catalog_pw@postgres:5432/plenka?sslmode=disable
+      APP_DATABASE_URL: postgres://catalog_app:catalog_app_pw@postgres:5432/plenka?sslmode=disable
+
+  billing:
+    <<: *svc
+    build: { context: ./backend, args: { SERVICE: billing } }
+    environment:
+      <<: *env
+      DATABASE_URL: postgres://billing:billing_pw@postgres:5432/plenka?sslmode=disable
+      APP_DATABASE_URL: postgres://billing_app:billing_app_pw@postgres:5432/plenka?sslmode=disable
+      GRPC_ADDR: ":9090"
+
+  playback:
+    <<: *svc
+    build: { context: ./backend, args: { SERVICE: playback } }
+    environment:
+      <<: *env
+      DATABASE_URL: postgres://playback:playback_pw@postgres:5432/plenka?sslmode=disable
+      APP_DATABASE_URL: postgres://playback_app:playback_app_pw@postgres:5432/plenka?sslmode=disable
+      STREAM_KEY: ${STREAM_KEY:-dev-stream-key-change-me}
+      BILLING_GRPC: billing:9090
+      MEDIA_DIR: /media
+    volumes:
+      - ./deploy/media:/media:ro
+
+  gateway:
+    <<: *svc
+    build: { context: ./backend, args: { SERVICE: gateway } }
+    depends_on: [identity, catalog, billing, playback]
+    environment:
+      INTERNAL_KEY: ${INTERNAL_KEY:-dev-internal-key-change-me}
+      IDENTITY_GRPC: identity:9090
+      IDENTITY_URL: http://identity:8080
+      CATALOG_URL: http://catalog:8080
+      BILLING_URL: http://billing:8080
+      PLAYBACK_URL: http://playback:8080
+      TRUST_XFF: "true"
+
+  web:
+    build: { context: . }
+    restart: unless-stopped
+    depends_on: [gateway]
+    ports: ["8080:80"]
+
+  # Наполнение каталога: 16 фильмов и сериалов немого кино. Идемпотентно:
+  # при повторном запуске пропускает то, что уже есть. Ждёт, пока поднимется gateway.
+  seed:
+    image: python:3.12-alpine
+    depends_on: [gateway]
+    restart: "no"
+    volumes:
+      - ./scripts:/s:ro
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@plenka.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin12345}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        for i in $$(seq 1 60); do
+          python /s/seed.py http://gateway:8080 "$$ADMIN_EMAIL" "$$ADMIN_PASSWORD" && exit 0
+          echo "gateway ещё не готов, повтор через 3 с ($$i/60)"
+          sleep 3
+        done
+        exit 1
+
+volumes:
+  pg: {}

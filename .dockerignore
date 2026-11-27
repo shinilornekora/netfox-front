@@ -1,0 +1,12 @@
+# Образ фронтенда собирается из корня: бэкенд, данные и служебное ему не нужны.
+node_modules
+dist
+coverage
+backend
+deploy
+docs
+scripts
+.git
+.github
+.husky
+*.log
