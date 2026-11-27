@@ -5,6 +5,7 @@ import { formatCard, formatMoney } from '@/shared/lib/format';
 import { useAppDispatch, useAppSelector } from '@/shared/lib/redux';
 import { Alert, Button, Modal, Spinner, TextField } from '@/shared/ui';
 import * as m from './model';
+import { RoutePath } from '@/shared/constants';
 
 /** Окно оплаты: подписка или покупка фильма. Рисуется один раз в Layout. */
 export function CheckoutModal() {
@@ -31,7 +32,7 @@ export function CheckoutModal() {
         </Alert>
         <p className="muted">Карта •••• {order?.card_last4}</p>
         <div className="row">
-          <Link to="/cabinet" className="neu-btn" onClick={() => close()}>
+          <Link to={RoutePath.cabinet} className="neu-btn" onClick={() => close()}>
             В кабинет
           </Link>
           <Button variant="primary" onClick={() => close()}>

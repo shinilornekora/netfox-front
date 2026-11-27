@@ -1,13 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { Order, OrderStatus } from '@/shared/api/types';
 import { formatDate, formatDateTime, formatMoney, orderStatusLabel, orderTone } from '@/shared/lib/format';
 import { useAppDispatch, useAppSelector } from '@/shared/lib/redux';
 import { Alert, Badge, Button, Card, Empty, Modal, Select, Spinner, Stat, TextArea } from '@/shared/ui';
+import { usePageModel } from '@/shared/lib/hooks';
 import * as m from './model';
 
 export default function SalesPage() {
   const dispatch = useAppDispatch();
-  useEffect(() => void dispatch(m.salesOpened()), [dispatch]);
+  usePageModel(m.salesOpened);
   const sales = useAppSelector(m.selectSales);
   const { nextBefore, status, refundError, items: orders } = sales;
   const loaded = sales.orders.data;

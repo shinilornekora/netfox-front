@@ -6,15 +6,14 @@ import { formatDuration, titleStatusLabel } from '@/shared/lib/format';
 import { Poster } from '@/entities/title/Poster';
 import { useAppDispatch, useAppSelector } from '@/shared/lib/redux';
 import { Alert, Badge, Button, Card, Modal, Select, Spinner, TextArea, TextField } from '@/shared/ui';
+import { usePageModel } from '@/shared/lib/hooks';
 import * as m from './model';
+import { RoutePath, pathTo, type IdParams } from '@/shared/constants';
 
 export default function TitleEditPage() {
-  const { id = null } = useParams();
+  const { id = null } = useParams<IdParams>();
   const dispatch = useAppDispatch();
-  useEffect(() => {
-    void dispatch(m.editOpened(id));
-    return () => void dispatch(m.editClosed());
-  }, [dispatch, id]);
+  usePageModel(m.editOpened, m.editClosed, id);
   const navigate = useNavigate();
   const { title, loadError, error, fields, notice } = useAppSelector(m.selectTitleEdit);
   // .unwrap(): промис отклоняется при ошибке API, как у эффекта — для then/catch в обработчиках.
@@ -44,7 +43,7 @@ export default function TitleEditPage() {
     const body: TitleFields = { ...form, price_kopecks: form.kind === 'series' ? 0 : form.price_kopecks };
     if (!title || !id) {
       create(body)
-        .then((t) => navigate(`/admin/titles/${t.id}`, { replace: true }))
+        .then((t) => navigate(pathTo.titleEdit(t.id), { replace: true }))
         .catch(() => undefined);
     } else {
       save({ ...body, id: title.id, revision: title.revision }).catch(() => undefined);
@@ -55,7 +54,7 @@ export default function TitleEditPage() {
     <div className="page stack">
       <div className="row-between">
         <h1>{id ? `Редактирование: ${title?.name}` : 'Новый тайтл'}</h1>
-        <Link to="/admin/titles" className="neu-btn small">
+        <Link to={RoutePath.adminTitles} className="neu-btn small">
           ← К каталогу
         </Link>
       </div>
@@ -81,7 +80,7 @@ export default function TitleEditPage() {
               <Button onClick={() => setWithdrawing(true)}>Снять с показа</Button>
             )}
             {title.status === 'published' && (
-              <Link to={`/title/${title.id}`} className="neu-btn">
+              <Link to={pathTo.title(title.id)} className="neu-btn">
                 На витрине
               </Link>
             )}
@@ -220,7 +219,7 @@ export default function TitleEditPage() {
               variant="danger"
               onClick={() =>
                 remove(title.id)
-                  .then(() => navigate('/admin/titles'))
+                  .then(() => navigate(RoutePath.adminTitles))
                   .catch(() => setConfirmDelete(false))
               }
             >

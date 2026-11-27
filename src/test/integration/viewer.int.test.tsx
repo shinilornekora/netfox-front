@@ -31,6 +31,15 @@ describe('зритель: от витрины до просмотра', () => {
     expect(await screen.findByText(/Ничего не нашлось/)).toBeInTheDocument();
   });
 
+  it('автопоиск: результат появляется без Enter, когда пользователь перестал печатать', async () => {
+    const user = userEvent.setup();
+    renderApp('/');
+    const grid = await screen.findByRole('region', { name: 'Каталог' });
+    await user.type(screen.getByLabelText('Название'), 'луну');
+    // useDebounce ждёт 400 мс тишины, затем каталог перезапрашивается сам.
+    await waitFor(() => expect(within(grid).getAllByRole('article')).toHaveLength(1), { timeout: 2000 });
+  });
+
   it('«Продолжить просмотр» на главной у зрителя', async () => {
     renderApp('/', { as: 'viewer' });
     const row = await screen.findByRole('region', { name: 'Продолжить просмотр' });

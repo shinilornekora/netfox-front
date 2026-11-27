@@ -1,32 +1,47 @@
-import { useEffect, type FormEvent } from 'react';
+import { useEffect, useRef, type FormEvent } from 'react';
 import { TitleCard } from '@/entities/title/TitleCard';
 import { selectRole } from '@/entities/session/model';
 import { useAppDispatch, useAppSelector } from '@/shared/lib/redux';
 import { kindLabel } from '@/shared/lib/format';
 import { Alert, Button, Card, Empty, Select, Spinner, TextField } from '@/shared/ui';
+import { useDebounce, usePageModel } from '@/shared/lib/hooks';
 import * as m from './model';
 
 export default function CatalogPage() {
   const dispatch = useAppDispatch();
-  useEffect(() => {
-    void dispatch(m.catalogOpened());
-    return () => void dispatch(m.catalogClosed());
-  }, [dispatch]);
+  usePageModel(m.catalogOpened, m.catalogClosed);
   const filters = useAppSelector(m.selectFilters);
   const view = useAppSelector(m.selectView);
   const genres = useAppSelector(m.selectGenres);
   const cont = useAppSelector(m.selectContinue);
   const role = useAppSelector(selectRole);
   const change = (patch: Partial<m.Filters>) => dispatch(m.filterChanged(patch));
-  const submit = () => void dispatch(m.searchSubmitted());
-  const reset = () => void dispatch(m.filtersReset());
+  // Строка, по которой последний раз искали: Enter, кнопка или автопоиск.
+  const searchedQ = useRef(filters.q);
+  const submit = () => {
+    searchedQ.current = filters.q;
+    void dispatch(m.searchSubmitted());
+  };
+  const reset = () => {
+    searchedQ.current = m.initialFilters.q;
+    void dispatch(m.filtersReset());
+  };
   const more = () => void dispatch(m.moreRequested());
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     submit();
   };
-  // Селекты применяются сразу, поиск по названию — по кнопке или Enter.
+  // Поиск по названию запускается сам, когда пользователь перестал печатать на 400 мс
+  // (useDebounce). Enter и кнопка ищут сразу — тогда автопоиск по той же строке не повторяется.
+  const debouncedQ = useDebounce(filters.q, 400);
+  useEffect(() => {
+    if (debouncedQ === searchedQ.current) return;
+    searchedQ.current = debouncedQ;
+    void dispatch(m.searchSubmitted());
+  }, [debouncedQ, dispatch]);
+
+  // Селекты применяются сразу.
   const pick = (patch: Partial<m.Filters>) => {
     change(patch);
     submit();

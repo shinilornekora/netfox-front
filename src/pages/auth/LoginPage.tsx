@@ -4,6 +4,7 @@ import { login as loginThunk } from '@/entities/session/model';
 import { useAppDispatch, useAppSelector } from '@/shared/lib/redux';
 import { Alert, Button, Card, TextField } from '@/shared/ui';
 import * as m from './model';
+import { RoutePath } from '@/shared/constants';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -44,7 +45,7 @@ export default function LoginPage() {
             {pending ? 'Входим…' : 'Войти'}
           </Button>
           <p className="muted">
-            Нет аккаунта? <Link to="/register">Зарегистрируйтесь</Link>
+            Нет аккаунта? <Link to={RoutePath.register}>Зарегистрируйтесь</Link>
           </p>
         </form>
       </Card>

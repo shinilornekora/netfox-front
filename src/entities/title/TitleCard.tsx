@@ -4,6 +4,7 @@ import type { Title, TitleRef } from '@/shared/api/types';
 import { formatMoney, kindLabel } from '@/shared/lib/format';
 import { Badge, ProgressBar } from '@/shared/ui';
 import { Poster } from './Poster';
+import { pathTo } from '@/shared/constants';
 
 /** Карточка тайтла в сетке витрины. Вся карточка — ссылка на страницу тайтла. */
 export function TitleCard({
@@ -19,7 +20,7 @@ export function TitleCard({
   const full = 'in_subscription' in title ? title : null;
   return (
     <article className="neu-card title-card" aria-label={title.name}>
-      <Link to={`/title/${title.id}`} className="stack" style={{ gap: 8, color: 'inherit' }}>
+      <Link to={pathTo.title(title.id)} className="stack" style={{ gap: 8, color: 'inherit' }}>
         <Poster title={title} />
         <h3>{title.name}</h3>
       </Link>

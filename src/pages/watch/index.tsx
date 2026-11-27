@@ -1,43 +1,24 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useRef } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { usePageModel, useProgressPing, type PlaybackPoint } from '@/shared/lib/hooks';
 import { formatClock } from '@/shared/lib/format';
 import { useAppDispatch, useAppSelector } from '@/shared/lib/redux';
 import { Alert, Card, Spinner } from '@/shared/ui';
 import * as m from './model';
-
-const PING_MS = 10_000;
+import { RoutePath, pathTo, type IdParams } from '@/shared/constants';
 
 export default function WatchPage() {
-  const { id = '' } = useParams();
+  const { id = '' } = useParams<IdParams>();
   const [params] = useSearchParams();
   const ep = params.get('ep') ?? undefined;
   const dispatch = useAppDispatch();
-  useEffect(() => {
-    void dispatch(m.watchOpened({ id, ep }));
-    return () => void dispatch(m.watchClosed());
-  }, [dispatch, id, ep]);
+  usePageModel(m.watchOpened, m.watchClosed, { id, ep });
   const { start, startError: error, pending } = useAppSelector(m.selectWatch);
-  const report = useCallback(
-    (p: { position: number; duration: number }) => void dispatch(m.positionReported(p)),
-    [dispatch],
-  );
+  const report = useCallback((p: PlaybackPoint) => void dispatch(m.positionReported(p)), [dispatch]);
   const video = useRef<HTMLVideoElement>(null);
 
   // Пинг прогресса, пока видео играет; плюс на паузе, в конце и при уходе со страницы.
-  useEffect(() => {
-    const v = video.current;
-    if (!start || !v) return;
-    const send = () => report({ position: v.currentTime, duration: v.duration || start.duration_sec });
-    const timer = setInterval(() => !v.paused && send(), PING_MS);
-    v.addEventListener('pause', send);
-    v.addEventListener('ended', send);
-    return () => {
-      clearInterval(timer);
-      v.removeEventListener('pause', send);
-      v.removeEventListener('ended', send);
-      send();
-    };
-  }, [start, report]);
+  useProgressPing(video, start, report);
 
   if (error) {
     return (
@@ -47,20 +28,22 @@ export default function WatchPage() {
           <Alert>{error.message}</Alert>
           {error.code === 'not_entitled' && (
             <div className="row">
-              <Link to="/plans" className="neu-btn primary">
+              <Link to={RoutePath.plans} className="neu-btn primary">
                 Выбрать подписку
               </Link>
-              <Link to={`/title/${id}`} className="neu-btn">
+              <Link to={pathTo.title(id)} className="neu-btn">
                 К фильму
               </Link>
             </div>
           )}
           {error.status === 403 && (
-            <Link to="/cabinet/profile" className="neu-btn">
+            <Link to={RoutePath.profile} className="neu-btn">
               Указать дату рождения
             </Link>
           )}
-          {error.code !== 'not_entitled' && error.status !== 403 && <Link to={`/title/${id}`}>К тайтлу</Link>}
+          {error.code !== 'not_entitled' && error.status !== 403 && (
+            <Link to={pathTo.title(id)}>К тайтлу</Link>
+          )}
         </Card>
       </div>
     );
@@ -71,7 +54,7 @@ export default function WatchPage() {
     <div className="page stack">
       <div className="row-between">
         <h1>{start.episode ? `Серия ${start.episode.number}. ${start.episode.name}` : 'Просмотр'}</h1>
-        <Link to={`/title/${id}`} className="neu-btn small">
+        <Link to={pathTo.title(id)} className="neu-btn small">
           ← К тайтлу
         </Link>
       </div>

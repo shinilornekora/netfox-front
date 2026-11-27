@@ -1,12 +1,12 @@
-import { useEffect } from 'react';
 import { TitleCard } from '@/entities/title/TitleCard';
 import { useAppDispatch, useAppSelector } from '@/shared/lib/redux';
 import { Alert, Button, Empty, Spinner } from '@/shared/ui';
+import { usePageModel } from '@/shared/lib/hooks';
 import * as m from './model';
 
 export default function WatchlistPage() {
   const dispatch = useAppDispatch();
-  useEffect(() => void dispatch(m.watchlistOpened()), [dispatch]);
+  usePageModel(m.watchlistOpened);
   const { items, pending, error } = useAppSelector(m.selectWatchlist);
   return (
     <div className="page stack">

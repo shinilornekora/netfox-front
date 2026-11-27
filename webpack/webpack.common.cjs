@@ -6,6 +6,10 @@ const HtmlWebpackPlugin = require('html-webpack-plugin');
 const CopyPlugin = require('copy-webpack-plugin');
 
 const root = path.resolve(__dirname, '..');
+// `webpack serve` (npm start) — режим разработки с React Fast Refresh: правка компонента
+// подменяется в браузере без перезагрузки, состояние (useState, Redux) сохраняется.
+// webpack-cli сам выставляет WEBPACK_SERVE для команды serve.
+const refresh = Boolean(process.env.WEBPACK_SERVE);
 // Те же переменные, что и у Vite: VITE_MOCK=1 — демо без бэкенда, VITE_BASE — подпапка.
 const base = process.env.VITE_BASE || '/';
 const mock = process.env.VITE_MOCK || '';
@@ -29,7 +33,14 @@ module.exports = {
         use: {
           loader: 'ts-loader',
           // Типы проверяет отдельный `npm run typecheck` (tsc), сборка только транспилирует.
-          options: { transpileOnly: true, compilerOptions: { noEmit: false } },
+          options: {
+            transpileOnly: true,
+            compilerOptions: { noEmit: false },
+            // Fast Refresh: трансформер помечает компоненты, чтобы их можно было горячо заменить.
+            ...(refresh && {
+              getCustomTransformers: () => ({ before: [require('react-refresh-typescript')()] }),
+            }),
+          },
         },
       },
       // SVG до 4 КБ встраиваются как data URL, крупнее — отдельным файлом.
