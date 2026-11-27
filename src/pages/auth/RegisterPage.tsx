@@ -1,26 +1,23 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { useUnit } from 'effector-react';
-import { registerFx } from '@/entities/session/model';
+import { register as registerThunk } from '@/entities/session/model';
+import { useAppDispatch, useAppSelector } from '@/shared/lib/redux';
 import { Alert, Button, Card, TextField } from '@/shared/ui';
 import * as m from './model';
 
 export default function RegisterPage() {
   const [form, setForm] = useState({ email: '', password: '', display_name: '', birth_date: '' });
-  const [error, fields, pending, register, reset] = useUnit([
-    m.$authError,
-    m.$fieldErrors,
-    m.$registerPending,
-    registerFx,
-    m.formReset,
-  ]);
-  useEffect(() => () => reset(), [reset]);
+  const dispatch = useAppDispatch();
+  const error = useAppSelector(m.selectAuthError);
+  const fields = useAppSelector(m.selectFieldErrors);
+  const pending = useAppSelector(m.selectRegisterPending);
+  useEffect(() => () => void dispatch(m.formReset()), [dispatch]);
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) =>
     setForm({ ...form, [k]: e.target.value });
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    register(form).catch(() => undefined);
+    void dispatch(registerThunk(form));
   };
 
   return (

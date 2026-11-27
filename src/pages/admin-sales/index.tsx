@@ -1,68 +1,22 @@
-import { createEffect, createEvent, createStore, sample } from 'effector';
-import { createGate, useGate, useUnit } from 'effector-react';
-import { useState } from 'react';
-import { api } from '@/shared/api/endpoints';
+import { useEffect, useState } from 'react';
 import type { Order, OrderStatus } from '@/shared/api/types';
-import { createRequest } from '@/shared/lib/request';
-import {
-  errorMessage,
-  formatDate,
-  formatDateTime,
-  formatMoney,
-  orderStatusLabel,
-  orderTone,
-} from '@/shared/lib/format';
+import { formatDate, formatDateTime, formatMoney, orderStatusLabel, orderTone } from '@/shared/lib/format';
+import { useAppDispatch, useAppSelector } from '@/shared/lib/redux';
 import { Alert, Badge, Button, Card, Empty, Modal, Select, Spinner, Stat, TextArea } from '@/shared/ui';
-
-export const SalesGate = createGate<void>();
-export const statusChanged = createEvent<OrderStatus | ''>();
-export const $status = createStore<OrderStatus | ''>('').on(statusChanged, (_, s) => s);
-export const plansQuery = createRequest((_: void) => api.plans());
-export const revenueQuery = createRequest((_: void) => api.revenue());
-export const ordersQuery = createRequest((s: OrderStatus | '') => api.adminOrders({ status: s }));
-export const moreRequested = createEvent();
-export const moreFx = createEffect((q: { status: string; before: string }) => api.adminOrders(q));
-export const $orders = createStore<Order[]>([])
-  .on(ordersQuery.fx.doneData, (_, r) => r.items)
-  .on(moreFx.doneData, (list, r) => [...list, ...r.items]);
-export const $nextBefore = createStore('')
-  .on(ordersQuery.fx.doneData, (_, r) => r.next_before)
-  .on(moreFx.doneData, (_, r) => r.next_before);
-sample({
-  clock: moreRequested,
-  source: { status: $status, before: $nextBefore },
-  filter: ({ before }) => before !== '',
-  target: moreFx,
-});
-export const refundFx = createEffect(({ id, reason }: { id: string; reason: string }) =>
-  api.refundOrder(id, reason),
-);
-export const $refundError = createStore<string | null>(null)
-  .on(refundFx.failData, (_, e) => errorMessage(e))
-  .reset(refundFx);
-
-sample({ clock: [SalesGate.open, refundFx.done], fn: () => undefined, target: revenueQuery.start });
-sample({ clock: SalesGate.open, fn: () => undefined, target: plansQuery.start });
-sample({ clock: [SalesGate.open, statusChanged, refundFx.done], source: $status, target: ordersQuery.start });
+import * as m from './model';
 
 export default function SalesPage() {
-  useGate(SalesGate);
-  const [loaded, more, nextBefore, plans] = useUnit([
-    ordersQuery.$data,
-    moreRequested,
-    $nextBefore,
-    plansQuery.$data,
-  ]);
+  const dispatch = useAppDispatch();
+  useEffect(() => void dispatch(m.salesOpened()), [dispatch]);
+  const sales = useAppSelector(m.selectSales);
+  const { nextBefore, status, refundError, items: orders } = sales;
+  const loaded = sales.orders.data;
+  const plans = sales.plans.data;
+  const rev = sales.revenue.data;
+  const revError = sales.revenue.error;
+  const more = () => void dispatch(m.moreRequested());
+  const setStatus = (s: OrderStatus | '') => void dispatch(m.statusChanged(s));
   const planName = (id?: string) => plans?.items.find((p) => p.id === id)?.name ?? id;
-  const [rev, revError, orders, status, setStatus, refund, refundError] = useUnit([
-    revenueQuery.$data,
-    revenueQuery.$error,
-    $orders,
-    $status,
-    statusChanged,
-    refundFx,
-    $refundError,
-  ]);
   const [target, setTarget] = useState<Order | null>(null);
   const [reason, setReason] = useState('');
   const max = Math.max(1, ...(rev?.days ?? []).map((d) => d.kopecks));
@@ -171,7 +125,8 @@ export default function SalesPage() {
             className="stack"
             onSubmit={(e) => {
               e.preventDefault();
-              refund({ id: target.id, reason })
+              dispatch(m.refunded({ id: target.id, reason }))
+                .unwrap()
                 .then(() => {
                   setTarget(null);
                   setReason('');

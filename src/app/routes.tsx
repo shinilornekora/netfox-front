@@ -2,8 +2,8 @@
 // В тестах тот же массив отдаётся в createMemoryRouter.
 import { lazy, useEffect } from 'react';
 import type { RouteObject } from 'react-router-dom';
-import { useUnit } from 'effector-react';
-import { appStarted, sessionLost } from '@/entities/session/model';
+import { restoreSession, sessionLost } from '@/entities/session/model';
+import { useAppDispatch } from '@/shared/lib/redux';
 import { onUnauthorized } from '@/shared/api/client';
 import { ErrorPage, ForbiddenPage, NotFoundPage } from '@/pages/not-found';
 import { GuestOnly, RequireAuth, RequireRole } from './guards';
@@ -48,12 +48,12 @@ const SalesPage = lazy(() => import(/* webpackChunkName: "page-admin-sales" */ '
 
 /** Корневой элемент: восстанавливает сессию и рисует общий layout. */
 export function Root() {
-  const [start, lost] = useUnit([appStarted, sessionLost]);
+  const dispatch = useAppDispatch();
   useEffect(() => {
-    start();
-    // Сессию отозвали (другое устройство, смена пароля) — модель узнаёт по 401.
-    return onUnauthorized(() => lost());
-  }, [start, lost]);
+    void dispatch(restoreSession());
+    // Сессию отозвали (другое устройство, смена пароля) — стор узнаёт по 401.
+    return onUnauthorized(() => dispatch(sessionLost()));
+  }, [dispatch]);
   return <Layout />;
 }
 

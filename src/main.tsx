@@ -1,11 +1,14 @@
 import { StrictMode, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { Provider } from 'react-redux';
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import { routes } from '@/app/routes';
 import { SidebarSlot } from '@/app/sidebarSlot';
+import { makeStore } from '@/app/store';
 import '@/app/styles.css';
 
 // На github.io приложение живёт в подпапке /netfox-front/.
+const store = makeStore();
 const router = createBrowserRouter(routes, { basename: import.meta.env.BASE_URL.replace(/\/$/, '') || '/' });
 
 async function boot() {
@@ -23,9 +26,11 @@ async function boot() {
   }
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
-      <SidebarSlot.Provider value={banner}>
-        <RouterProvider router={router} />
-      </SidebarSlot.Provider>
+      <Provider store={store}>
+        <SidebarSlot.Provider value={banner}>
+          <RouterProvider router={router} />
+        </SidebarSlot.Provider>
+      </Provider>
     </StrictMode>,
   );
 }

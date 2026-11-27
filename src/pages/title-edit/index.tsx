@@ -1,31 +1,28 @@
-import { useGate, useUnit } from 'effector-react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import type { Kind, TitleFields } from '@/shared/api/types';
+import type { Kind, Title, TitleFields } from '@/shared/api/types';
 import { AGE_RATINGS, GENRES } from '@/shared/lib/genres';
 import { formatDuration, titleStatusLabel } from '@/shared/lib/format';
 import { Poster } from '@/entities/title/Poster';
+import { useAppDispatch, useAppSelector } from '@/shared/lib/redux';
 import { Alert, Badge, Button, Card, Modal, Select, Spinner, TextArea, TextField } from '@/shared/ui';
 import * as m from './model';
 
 export default function TitleEditPage() {
   const { id = null } = useParams();
-  useGate(m.EditGate, { id });
+  const dispatch = useAppDispatch();
+  useEffect(() => {
+    void dispatch(m.editOpened(id));
+    return () => void dispatch(m.editClosed());
+  }, [dispatch, id]);
   const navigate = useNavigate();
-  const [title, loadError, error, fields, notice] = useUnit([
-    m.$title,
-    m.$loadError,
-    m.$error,
-    m.$fields,
-    m.$notice,
-  ]);
-  const [create, save, publish, withdraw, remove] = useUnit([
-    m.createFx,
-    m.saveFx,
-    m.publishFx,
-    m.withdrawFx,
-    m.deleteFx,
-  ]);
+  const { title, loadError, error, fields, notice } = useAppSelector(m.selectTitleEdit);
+  // .unwrap(): промис отклоняется при ошибке API, как у эффекта — для then/catch в обработчиках.
+  const create = (b: TitleFields) => dispatch(m.createTitle(b)).unwrap();
+  const save = (b: Parameters<typeof m.saveTitle>[0]) => dispatch(m.saveTitle(b)).unwrap();
+  const publish = (t: Title) => dispatch(m.publishTitle(t)).unwrap();
+  const withdraw = (p: { t: Title; reason: string }) => dispatch(m.withdrawTitle(p)).unwrap();
+  const remove = (titleId: string) => dispatch(m.deleteTitle(titleId)).unwrap();
   const [form, setForm] = useState<TitleFields>(m.emptyFields);
   const [withdrawing, setWithdrawing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -264,12 +261,10 @@ function WithdrawDialog({ onClose, onSubmit }: { onClose: () => void; onSubmit: 
 }
 
 function Episodes() {
-  const [title, fields, saveEp, deleteEp] = useUnit([
-    m.$title,
-    m.$fields,
-    m.saveEpisodeFx,
-    m.deleteEpisodeFx,
-  ]);
+  const dispatch = useAppDispatch();
+  const { title, fields } = useAppSelector(m.selectTitleEdit);
+  const saveEp = (p: Parameters<typeof m.saveEpisode>[0]) => dispatch(m.saveEpisode(p)).unwrap();
+  const deleteEp = (p: Parameters<typeof m.deleteEpisode>[0]) => dispatch(m.deleteEpisode(p)).unwrap();
   const eps = title?.episodes ?? [];
   const nextNo = (eps.at(-1)?.number ?? 0) + 1;
   const [ep, setEp] = useState({ season: 1, number: nextNo, name: '', minutes: 45 });
