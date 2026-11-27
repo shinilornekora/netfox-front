@@ -1,9 +1,28 @@
-# Netfox — фронтенд онлайн-кинотеатра
+# Netfox — онлайн-кинотеатр
 
 **Демо:** https://shinilornekora.github.io/netfox-front/ (бэкенд эмулируется в браузере, входы: `anna@example.com` / `password123`, `max@example.com` / `password123`, `admin@plenka.local` / `admin12345`)
 
-SPA онлайн-кинотеатра с двумя ролями: **зритель** и **администратор**.
-Бэкенд — микросервисы [Плёнки](https://github.com/shinilornekora/plenka) (gateway, identity, catalog, billing, playback); фронт ходит только в `gateway` по `/api`.
+Онлайн-кинотеатр с двумя ролями: **зритель** и **администратор**. В репозитории всё приложение: SPA (корень) и бэкенд — микросервисы на Go в `backend/` (gateway, identity, catalog, billing, playback; перенесены из [Плёнки](https://github.com/shinilornekora/plenka)). Фронт ходит только в `gateway` по `/api`.
+
+## Запуск одной командой
+
+Нужен только [Docker](https://www.docker.com/products/docker-desktop/) (Docker Desktop на Windows и macOS). Из корня репозитория:
+
+```bash
+docker compose up -d --build
+```
+
+Через 3–6 минут при первом запуске (потом — секунды) откройте **http://localhost:8080**. Команда собирает и поднимает PostgreSQL, Kafka, пять сервисов бэкенда, фронтенд (nginx) и сама наполняет каталог: 16 фильмов и сериалов немого кино.
+
+На Windows то же самое — двойной клик по **`start.bat`**: он проверит Docker, поднимет всё, дождётся каталога и откроет сайт. На Linux и macOS — `./start.sh`. Остановить: `stop.bat` или `docker compose down`; стереть данные и начать заново: `reset.bat` или `docker compose down -v`.
+
+| Кто           | Вход                                                                                  |
+| ------------- | ------------------------------------------------------------------------------------- |
+| Администратор | `admin@plenka.local` / `admin12345`                                                   |
+| Зритель       | зарегистрируйтесь на сайте (пароль от 10 символов, буквы и цифры)                     |
+| Оплата        | `4242 4242 4242 4242` — успешно; остальные тестовые карты есть кнопками в окне оплаты |
+
+Вместо фильмов плеер показывает 60-секундный ролик `deploy/media/sample.mp4`. Сами фильмы (около 12 ГБ, archive.org) скачивает `scripts/download_films.bat` — каждый становится доступен сразу после загрузки.
 
 **Стек:** TypeScript · React 18 · Effector (+ effector-react) · React Router (data router) · webpack (основной сборщик) и Vite (второй конфиг) · Vitest · Testing Library · MSW. Стиль — неоморфизм на чистом CSS без UI-библиотек, тёмная тема по системной настройке, боковое меню с адаптивом. Стек, стиль и критерии приёмки взяты из фронтенда турфирмы [TourFlow](https://github.com/shinilornekora/tourflow-front).
 
@@ -15,7 +34,7 @@ SPA онлайн-кинотеатра с двумя ролями: **зрител
 | Зритель       | Покупка фильма навсегда и оформление подписки (тестовые карты, ключ идемпотентности, отказ банка, «потерянный ответ» с опросом заказа); плеер с продолжением с места остановки и пингами прогресса; «Продолжить просмотр»; «Смотреть позже»; кабинет: подписка и автопродление, покупки, заказы, история, устройства; профиль с датой рождения (для 18+) и смена пароля |
 | Администратор | Каталог тайтлов с фильтром по статусу; создание фильма или сериала, редактирование с контролем ревизии, серии (добавить, удалить), публикация, снятие с показа с причиной, удаление черновика; продажи: выручка, график по дням, заказы с фильтром, возврат с причиной                                                                                                  |
 
-## Запуск
+## Разработка фронтенда
 
 ```bash
 npm install
@@ -28,7 +47,7 @@ npm run build:vite     # продакшен-сборка Vite
 npm run build:pages    # демо-сборка для GitHub Pages
 ```
 
-Бэкенд Плёнки целиком: `cd plenka/deploy && docker compose up -d --build` — nginx с `/api` слушает `:8080`, это адрес по умолчанию для прокси dev-сервера. Если gateway запущен отдельно (`HTTP_ADDR=:8090`), укажите `VITE_GATEWAY_URL=http://localhost:8090`.
+Бэкенд для разработки — тот же `docker compose up -d --build`: nginx с `/api` слушает `:8080`, это адрес по умолчанию для прокси dev-сервера. Если gateway запущен отдельно (`HTTP_ADDR=:8090`), укажите `VITE_GATEWAY_URL=http://localhost:8090`.
 
 **Проверки:** `npm run typecheck` (tsc), `npm run lint` (ESLint), `npm run format:check` (Prettier), `npm run check` — всё сразу. Перед коммитом husky запускает lint-staged (eslint --fix + prettier на изменённых файлах) и проверку типов.
 
@@ -59,7 +78,23 @@ npm run coverage
 | React 18, TypeScript, webpack dev/prod, ESLint + Prettier + husky | см. `package.json`, `webpack/`, `eslint.config.mjs`, `.husky/`                                                                                                                           |
 | Тесты                                                             | 46 юнит и 26 интеграционных, CI в `.github/workflows/ci.yml`; ручной прогон всех сценариев против настоящего бэкенда Плёнки                                                              |
 
-## Структура (Feature-Sliced)
+## Структура репозитория
+
+```
+docker-compose.yml   всё приложение одной командой
+Dockerfile           образ фронтенда: сборка webpack → nginx (nginx.conf проксирует /api в gateway)
+start.bat, start.sh  запуск в один клик; stop.bat, reset.bat
+src/                 SPA (Feature-Sliced, см. ниже)
+backend/             Go: go.work, contracts, kit, services/{gateway,identity,catalog,billing,playback}, tools
+backend/Dockerfile   один образ на все сервисы, аргумент SERVICE выбирает какой
+deploy/              init.sql (схемы и роли PostgreSQL), media/sample.mp4
+scripts/             seed.py (наполнение каталога), e2e.py, chaos.py, download_films.bat
+docs/backend/        архитектура, решения и замеры бэкенда (ARCHITECTURE.md, TRADEOFFS.md, evidence)
+```
+
+Пути в `docs/backend` написаны для исходного репозитория Плёнки: `services/…`, `kit/…` теперь лежат в `backend/`, а `frontend/` заменён этим SPA.
+
+### Фронтенд (Feature-Sliced)
 
 ```
 src/
@@ -71,6 +106,20 @@ src/
   test/       MSW-gateway, фикстуры, интеграционные тесты
   demo/       демо-режим для GitHub Pages
 ```
+
+## Бэкенд: проверки
+
+```bash
+# один раз: роль без SUPERUSER (суперпользователь обходит RLS, тесты такую роль не примут)
+docker compose exec postgres psql -U plenka -c "CREATE ROLE plenka_test LOGIN PASSWORD 'plenka_test'" \
+  -c "CREATE DATABASE netfox_test OWNER plenka_test"
+cd backend
+export TEST_PG_DSN="postgres://plenka_test:plenka_test@localhost:5433/netfox_test?sslmode=disable"
+for m in kit tools services/*; do (cd $m && go test -count=1 -p 1 ./...); done
+python3 ../scripts/e2e.py http://localhost:8080      # сквозной сценарий через gateway
+```
+
+CI (`.github/workflows/ci.yml`) проверяет фронтенд (типы, линт, формат, тесты, обе сборки), бэкенд (`go vet` и тесты на PostgreSQL) и сборку всех Docker-образов.
 
 ## Сессия и безопасность
 

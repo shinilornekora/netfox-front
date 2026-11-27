@@ -1,0 +1,7 @@
+# loadgen mix=checkout workers=8 requests=100 runs=3 go=go1.26.0 cpu=2 date=2026-11-15T21:11:33Z
+run=1 workers=8 wall=409ms ok=99 throughput=242/s not_started=0
+  checkout  n=99    err=1   mean=23.5 p50=6.3 p95=111.9 p99=204.7 max=204.7 ms
+run=2 workers=8 wall=455ms ok=99 throughput=217/s not_started=0
+  checkout  n=99    err=1   mean=24.8 p50=7.6 p95=113.1 p99=202.4 max=202.4 ms
+run=3 workers=8 wall=384ms ok=98 throughput=256/s not_started=0
+  checkout  n=98    err=2   mean=19.9 p50=6.0 p95=65.1 p99=192.0 max=192.0 ms

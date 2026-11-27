@@ -3,3 +3,12 @@ dist
 coverage
 *.local
 .vite
+__pycache__
+*.log
+.env
+backend/bin
+# постеры скачиваются отдельно, источники — scripts/posters/SOURCES.json
+scripts/posters/*.jpg
+# фильмы скачивает scripts/download_films.bat
+deploy/media/*.mp4
+!deploy/media/sample.mp4

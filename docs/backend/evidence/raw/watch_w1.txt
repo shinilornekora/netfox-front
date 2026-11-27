@@ -1,0 +1,10 @@
+# loadgen mix=watch workers=1 requests=2000 runs=3 go=go1.26.0 cpu=2 date=2026-11-15T21:48:03Z
+run=1 workers=1 wall=2.666s ok=2000 throughput=750/s not_started=0
+  continue  n=400   err=0   mean=1.0 p50=1.0 p95=1.3 p99=1.9 max=3.2 ms
+  progress  n=1600  err=0   mean=1.4 p50=1.4 p95=1.8 p99=2.3 max=4.0 ms
+run=2 workers=1 wall=2.828s ok=2000 throughput=707/s not_started=0
+  continue  n=400   err=0   mean=1.0 p50=1.0 p95=1.3 p99=1.5 max=1.7 ms
+  progress  n=1600  err=0   mean=1.5 p50=1.5 p95=1.9 p99=2.6 max=8.6 ms
+run=3 workers=1 wall=2.821s ok=2000 throughput=709/s not_started=0
+  continue  n=400   err=0   mean=1.0 p50=1.0 p95=1.4 p99=1.7 max=1.9 ms
+  progress  n=1600  err=0   mean=1.5 p50=1.4 p95=2.0 p99=2.5 max=5.1 ms

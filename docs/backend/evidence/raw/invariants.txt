@@ -1,0 +1,50 @@
+# Инварианты после всех опытов (база plenka стенда, 15.11.2026). Каждая проверка — запрос и число нарушений.
+
+-- объём
+SELECT (SELECT count(*) FROM billing.orders) AS orders, (SELECT count(*) FROM billing.purchases) AS purchases,
+       (SELECT count(*) FROM billing.outbox) AS outbox_events, (SELECT count(*) FROM billing.paysim_charges) AS bank_charges;
+ orders | purchases | outbox_events | bank_charges 
+--------+-----------+---------------+--------------
+ 114057 |    112290 |         20024 |       114057
+
+-- 1. у каждой покупки есть завершённый заказ
+SELECT count(*) AS violations FROM billing.purchases p
+  LEFT JOIN billing.orders o ON o.id = p.order_id AND o.status = 'completed' WHERE o.id IS NULL;
+ violations 
+------------
+          0
+
+-- 2. у каждого завершённого заказа есть успешное списание в банке
+SELECT count(*) AS violations FROM billing.orders o
+  LEFT JOIN billing.paysim_charges c ON c.ref = o.id::text AND c.status = 'succeeded'
+  WHERE o.status = 'completed' AND c.ref IS NULL;
+ violations 
+------------
+          0
+
+-- 3. у каждого возвращённого заказа деньги в банке возвращены или не списывались
+SELECT count(*) AS violations FROM billing.orders o
+  JOIN billing.paysim_charges c ON c.ref = o.id::text WHERE o.status = 'refunded' AND c.status = 'succeeded';
+ violations 
+------------
+          0
+
+-- 4. ни один фильм не оплачен одним зрителем дважды (завершённые заказы)
+SELECT count(*) AS violations FROM (SELECT user_id, title_id FROM billing.orders
+  WHERE kind = 'purchase' AND status = 'completed' GROUP BY 1, 2 HAVING count(*) > 1) x;
+ violations 
+------------
+          0
+
+-- 5. сага не оставила заказы висеть
+SELECT count(*) AS violations FROM billing.orders WHERE status IN ('charging', 'refunding') AND updated_at < now() - interval '1 minute';
+ violations 
+------------
+          0
+
+-- 6. все события outbox отправлены
+SELECT count(*) AS total, count(*) FILTER (WHERE sent_at IS NULL) AS unsent FROM billing.outbox;
+ total | unsent 
+-------+--------
+ 20024 |      0
+
