@@ -18,3 +18,43 @@ jobs:
       - run: npm run test:integration
       - run: npm run build # webpack (основной сборщик)
       - run: npm run build:vite # vite (второй конфиг для сравнения)
+
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: plenka
+          POSTGRES_PASSWORD: plenka
+          POSTGRES_DB: plenka_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U plenka" --health-interval 2s --health-retries 30
+    env:
+      # Тесты требуют роль без SUPERUSER: суперпользователь обходит RLS.
+      TEST_PG_DSN: postgres://plenka_test:plenka_test@localhost:5432/netfox_test?sslmode=disable
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache-dependency-path: backend/go.work.sum
+      - name: Тестовая роль без SUPERUSER
+        env: { PGPASSWORD: plenka }
+        run: |
+          psql -h localhost -U plenka -d plenka_test -c "CREATE ROLE plenka_test LOGIN PASSWORD 'plenka_test'"
+          psql -h localhost -U plenka -d plenka_test -c "CREATE DATABASE netfox_test OWNER plenka_test"
+      - run: go vet ./contracts/... ./kit/... ./tools/... ./services/billing/... ./services/catalog/... ./services/gateway/... ./services/identity/... ./services/playback/...
+      # Интеграционные тесты сервисов на настоящем PostgreSQL (каждый пакет — своя схема).
+      - run: for m in kit tools services/*; do (cd $m && go test -count=1 -p 1 ./...) || exit 1; done
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Сборка всех образов: то же, что делает `docker compose up --build` у проверяющего.
+      - run: docker compose build

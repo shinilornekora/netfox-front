@@ -3,3 +3,8 @@ coverage
 node_modules
 public/mockServiceWorker.js
 package-lock.json
+backend
+deploy
+docs
+scripts
+docker-compose.yml

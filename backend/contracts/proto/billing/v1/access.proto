@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+// Решение «может ли зритель смотреть тайтл» принадлежит billing: только он
+// знает о подписках и покупках. playback спрашивает его при старте
+// просмотра (ПКП-4: проверка ресурса по gRPC).
+package plenka.billing.v1;
+
+option go_package = "plenka/contracts/gen/billing/v1;billingv1";
+
+service Access {
+  rpc Check(CheckRequest) returns (CheckResponse);
+}
+
+message CheckRequest {
+  string user_id = 1;
+  string title_id = 2;
+}
+
+enum Grant {
+  GRANT_UNSPECIFIED = 0;
+  GRANT_SUBSCRIPTION = 1;  // смотрит по подписке
+  GRANT_PURCHASE = 2;      // фильм куплен
+  GRANT_FREE = 3;          // зарезервировано под бесплатный контент
+}
+
+enum Denial {
+  DENIAL_UNSPECIFIED = 0;
+  DENIAL_NOT_ENTITLED = 1;  // нет подписки и покупки
+  DENIAL_NOT_AVAILABLE = 2; // тайтл не опубликован или неизвестен billing
+}
+
+message CheckResponse {
+  bool allowed = 1;
+  Grant grant = 2;
+  Denial denial = 3;
+  // До какого момента решение заведомо верно (конец периода подписки);
+  // 0 — бессрочно (покупка). playback может кэшировать ответ до этого времени.
+  int64 valid_until_unix = 4;
+}

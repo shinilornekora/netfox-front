@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+// Внутренний контракт identity: gateway превращает непрозрачный токен
+// сессии из cookie в пользователя. Вызывается на каждый запрос с cookie,
+// поэтому gateway кэширует ответ на короткое время.
+package plenka.identity.v1;
+
+option go_package = "plenka/contracts/gen/identity/v1;identityv1";
+
+service Sessions {
+  rpc Resolve(ResolveRequest) returns (ResolveResponse);
+}
+
+message ResolveRequest {
+  string token = 1;
+}
+
+message ResolveResponse {
+  bool valid = 1;
+  string user_id = 2;
+  string role = 3;        // viewer | admin
+  int32 birth_year = 4;   // 0 — не указан
+  int64 expires_at_unix = 5;
+}
