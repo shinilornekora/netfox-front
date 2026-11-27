@@ -1,6 +1,7 @@
-import { useGate, useUnit } from 'effector-react';
+import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { $user } from '@/entities/session/model';
+import { selectUser } from '@/entities/session/model';
+import { useAppDispatch, useAppSelector } from '@/shared/lib/redux';
 import {
   formatDate,
   formatDateTime,
@@ -13,24 +14,21 @@ import { Alert, Badge, Button, Card, Empty, Spinner, Stat, Tabs } from '@/shared
 import * as m from './model';
 
 export default function CabinetPage() {
-  useGate(m.CabinetGate);
-  const [user, tab, setTab, wallet, walletError, devices, history, next, actionError] = useUnit([
-    $user,
-    m.$tab,
-    m.tabChanged,
-    m.walletQuery.$data,
-    m.walletQuery.$error,
-    m.devicesQuery.$data,
-    m.$history,
-    m.$historyNext,
-    m.$actionError,
-  ]);
-  const [toggleRenew, revoke, more, renewPending] = useUnit([
-    m.autoRenewToggled,
-    m.deviceRevoked,
-    m.historyMore,
-    m.autoRenewFx.pending,
-  ]);
+  const dispatch = useAppDispatch();
+  useEffect(() => {
+    void dispatch(m.cabinetOpened());
+    return () => void dispatch(m.cabinetClosed());
+  }, [dispatch]);
+  const user = useAppSelector(selectUser);
+  const c = useAppSelector(m.selectCabinet);
+  const { tab, history, historyNext: next, actionError, renewPending } = c;
+  const wallet = c.wallet.data;
+  const walletError = c.wallet.error;
+  const devices = c.devices.data;
+  const setTab = (t: m.Tab) => dispatch(m.tabChanged(t));
+  const toggleRenew = (enabled: boolean) => void dispatch(m.autoRenewToggled(enabled));
+  const revoke = (d: { id: string; current: boolean }) => void dispatch(m.deviceRevoked(d));
+  const more = () => void dispatch(m.historyMore());
   const sub = wallet?.subscription ?? null;
 
   return (

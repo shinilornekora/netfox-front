@@ -1,36 +1,83 @@
-// Маленькая фабрика «запрос → данные/ошибка/загрузка» поверх эффекта Effector,
-// чтобы страницы не дублировали одинаковые сторы.
-import {
-  createEffect,
-  createEvent,
-  createStore,
-  sample,
-  type Effect,
-  type EventCallable,
-  type Store,
-} from 'effector';
-import { errorMessage } from './format';
+// Общие кирпичики для Redux: thunk поверх запроса к API и типовое
+// состояние «данные / ошибка / загрузка», чтобы слайсы страниц не дублировали
+// одинаковые редьюсеры.
+import { createAsyncThunk, type ActionReducerMapBuilder, type AsyncThunk } from '@reduxjs/toolkit';
+import { ApiError } from '@/shared/api/client';
+import { errorFields, errorMessage } from './format';
 
-export interface Request<P, D> {
-  fx: Effect<P, D>;
-  start: EventCallable<P>;
-  reset: EventCallable<void>;
-  $data: Store<D | null>;
-  $error: Store<string | null>;
-  $pending: Store<boolean>;
+/** Ошибка запроса в сериализуемом виде: в Redux-состоянии нельзя хранить экземпляры классов. */
+export interface Problem {
+  message: string;
+  code: string;
+  status: number;
+  fields: Record<string, string>;
 }
 
-export function createRequest<P = void, D = unknown>(handler: (p: P) => Promise<D>): Request<P, D> {
-  const fx = createEffect<P, D>(handler);
-  const start = createEvent<P>();
-  const reset = createEvent();
-  const $data = createStore<D | null>(null, { skipVoid: false })
-    .on(fx.doneData, (_, d) => d)
-    .reset(reset);
-  const $error = createStore<string | null>(null)
-    .on(fx, () => null)
-    .on(fx.failData, (_, e) => errorMessage(e))
-    .reset(reset);
-  sample({ clock: start, target: fx });
-  return { fx, start, reset, $data, $error, $pending: fx.pending };
+export function toProblem(e: unknown): Problem {
+  return {
+    message: errorMessage(e),
+    code: e instanceof ApiError ? e.code : 'unknown',
+    status: e instanceof ApiError ? e.status : 0,
+    fields: errorFields(e),
+  };
+}
+
+type ThunkApi = { rejectValue: Problem };
+type ThunkTools = { getState: () => unknown; dispatch: (a: unknown) => unknown };
+
+/**
+ * createAsyncThunk, у которого любая ошибка API превращается в Problem
+ * (action.payload у rejected). Компоненты получают её же из `.unwrap()`.
+ */
+export function createApiThunk<R, A = void>(
+  type: string,
+  handler: (arg: A, tools: ThunkTools) => Promise<R>,
+): AsyncThunk<R, A, ThunkApi> {
+  return createAsyncThunk<R, A, ThunkApi>(type, async (arg, t) => {
+    try {
+      return await handler(arg, { getState: t.getState, dispatch: t.dispatch as ThunkTools['dispatch'] });
+    } catch (e) {
+      return t.rejectWithValue(toProblem(e));
+    }
+  });
+}
+
+/** Сообщение об ошибке из rejected-экшена createApiThunk. */
+export const problemText = (a: { payload?: Problem; error: { message?: string } }) =>
+  a.payload?.message ?? a.error.message ?? 'Неизвестная ошибка';
+
+export interface RequestState<D> {
+  data: D | null;
+  error: string | null;
+  pending: boolean;
+}
+
+export const idle = <D>(): RequestState<D> => ({ data: null, error: null, pending: false });
+
+/**
+ * Типовые редьюсеры запроса: pending — загрузка и сброс ошибки,
+ * fulfilled — данные, rejected — текст ошибки. Это матчеры, поэтому в builder
+ * их вызывают последними (после addCase) — и рядом можно добавить свои addCase на тот же thunk.
+ */
+export function addRequestCases<S, D, A>(
+  builder: ActionReducerMapBuilder<S>,
+  thunk: AsyncThunk<D, A, ThunkApi>,
+  pick: (s: S) => RequestState<D>,
+) {
+  builder
+    .addMatcher(thunk.pending.match, (s) => {
+      const r = pick(s as S);
+      r.pending = true;
+      r.error = null;
+    })
+    .addMatcher(thunk.fulfilled.match, (s, a) => {
+      const r = pick(s as S);
+      r.pending = false;
+      (r as RequestState<unknown>).data = a.payload;
+    })
+    .addMatcher(thunk.rejected.match, (s, a) => {
+      const r = pick(s as S);
+      r.pending = false;
+      r.error = problemText(a);
+    });
 }

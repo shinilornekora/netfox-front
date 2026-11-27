@@ -1,6 +1,7 @@
-import { useGate, useUnit } from 'effector-react';
+import { useEffect } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { $role } from '@/entities/session/model';
+import { selectRole } from '@/entities/session/model';
+import { useAppDispatch, useAppSelector } from '@/shared/lib/redux';
 import { Poster } from '@/entities/title/Poster';
 import { opened as checkoutOpened } from '@/features/checkout/model';
 import {
@@ -18,16 +19,18 @@ import * as m from './model';
 
 export default function TitlePage() {
   const { id = '' } = useParams();
-  useGate(m.TitleGate, { id });
+  const dispatch = useAppDispatch();
+  useEffect(() => {
+    void dispatch(m.titleOpened(id));
+    return () => void dispatch(m.titleClosed());
+  }, [dispatch, id]);
   const location = useLocation();
-  const [view, role, inWatchlist, watchError, toggle, buy] = useUnit([
-    m.$view,
-    $role,
-    m.$inWatchlist,
-    m.$watchError,
-    m.watchToggled,
-    checkoutOpened,
-  ]);
+  const view = useAppSelector(m.selectView);
+  const role = useAppSelector(selectRole);
+  const inWatchlist = useAppSelector(m.selectInWatchlist);
+  const watchError = useAppSelector(m.selectWatchError);
+  const toggle = () => void dispatch(m.watchToggled());
+  const buy = (t: Parameters<typeof checkoutOpened>[0]) => dispatch(checkoutOpened(t));
   const { title: t, offer, progress } = view;
 
   if (view.error) return <Alert>{view.error}</Alert>;

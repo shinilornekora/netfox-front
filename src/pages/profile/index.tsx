@@ -1,12 +1,15 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { useUnit } from 'effector-react';
-import { $user } from '@/entities/session/model';
+import { selectUser } from '@/entities/session/model';
+import { useAppDispatch, useAppSelector } from '@/shared/lib/redux';
 import { Alert, Badge, Button, Card, TextField } from '@/shared/ui';
-import { errorFields, errorMessage, roleLabel } from '@/shared/lib/format';
-import { changePasswordFx, updateMeFx } from './model';
+import { roleLabel } from '@/shared/lib/format';
+import type { Problem } from '@/shared/lib/request';
+import { changePassword, updateMe } from './model';
 
 export default function ProfilePage() {
-  const [user, save, pending] = useUnit([$user, updateMeFx, updateMeFx.pending]);
+  const user = useAppSelector(selectUser);
+  const dispatch = useAppDispatch();
+  const [pending, setPending] = useState(false);
   const [form, setForm] = useState({ display_name: '', birth_date: '' });
   const [msg, setMsg] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
   useEffect(() => {
@@ -16,9 +19,12 @@ export default function ProfilePage() {
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    save({ ...form, revision: user.revision })
+    setPending(true);
+    dispatch(updateMe({ ...form, revision: user.revision }))
+      .unwrap()
       .then(() => setMsg({ tone: 'success', text: 'Профиль сохранён' }))
-      .catch((err) => setMsg({ tone: 'error', text: errorMessage(err) }));
+      .catch((err: Problem) => setMsg({ tone: 'error', text: err.message }))
+      .finally(() => setPending(false));
   };
 
   return (
@@ -56,23 +62,27 @@ export default function ProfilePage() {
 }
 
 function PasswordForm() {
-  const [change, pending] = useUnit([changePasswordFx, changePasswordFx.pending]);
+  const dispatch = useAppDispatch();
+  const [pending, setPending] = useState(false);
   const [form, setForm] = useState({ current_password: '', new_password: '' });
   const [msg, setMsg] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
   const [fields, setFields] = useState<Record<string, string>>({});
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    change(form)
+    setPending(true);
+    dispatch(changePassword(form))
+      .unwrap()
       .then(() => {
         setForm({ current_password: '', new_password: '' });
         setFields({});
         setMsg({ tone: 'success', text: 'Пароль изменён. Другие устройства вышли из аккаунта' });
       })
-      .catch((err) => {
-        setFields(errorFields(err));
-        setMsg({ tone: 'error', text: errorMessage(err) });
-      });
+      .catch((err: Problem) => {
+        setFields(err.fields);
+        setMsg({ tone: 'error', text: err.message });
+      })
+      .finally(() => setPending(false));
   };
 
   return (

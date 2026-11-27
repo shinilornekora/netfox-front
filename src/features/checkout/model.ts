@@ -6,12 +6,13 @@
 //  - 202 — банк не ответил: заказ «в обработке», опрашиваем GET /orders/{id},
 //    пока recovery на сервере не доведёт его до конца.
 //  - После отказа ключ меняется: повтор с той же карты — это уже новый заказ.
-import { attach, createEffect, createEvent, createStore, sample } from 'effector';
+import { createAction, createAsyncThunk, createSlice, type PayloadAction } from '@reduxjs/toolkit';
 import { ApiError } from '@/shared/api/client';
 import { api, type CheckoutIn } from '@/shared/api/endpoints';
 import type { Order } from '@/shared/api/types';
 import { errorMessage } from '@/shared/lib/format';
 import { newKey } from '@/shared/lib/id';
+import type { RootState } from '@/shared/lib/redux';
 
 export interface CheckoutTarget {
   kind: 'subscription' | 'purchase';
@@ -24,101 +25,152 @@ export interface CheckoutTarget {
 
 export type Phase = 'form' | 'paying' | 'polling' | 'done' | 'failed';
 
+export interface CheckoutState {
+  target: CheckoutTarget | null;
+  card: string;
+  /** Idempotency-Key текущего заказа. */
+  key: string;
+  order: Order | null;
+  error: string | null;
+  phase: Phase;
+}
+
 /** Пауза между опросами заказа; в тестах — 0. */
 export const pollDelay = { ms: 1500 };
 
-export const opened = createEvent<CheckoutTarget>();
-export const closed = createEvent();
-export const cardChanged = createEvent<string>();
-export const submitted = createEvent();
-export const retried = createEvent();
-/** Оплата прошла: модели страниц перезапрашивают права и кошелёк. */
-export const paid = createEvent<Order>();
+const initialState: CheckoutState = {
+  target: null,
+  card: '',
+  key: '',
+  order: null,
+  error: null,
+  phase: 'form',
+};
 
-export const $target = createStore<CheckoutTarget | null>(null)
-  .on(opened, (_, t) => t)
-  .reset(closed);
-export const $card = createStore('')
-  .on(cardChanged, (_, c) => c)
-  .reset(opened);
-export const $key = createStore('').on(opened, () => newKey());
-export const $order = createStore<Order | null>(null).reset(opened, retried);
-export const $error = createStore<string | null>(null).reset(opened, submitted);
-export const $phase = createStore<Phase>('form').reset(opened, retried);
+/** Оплата прошла: модели страниц перезапрашивают права и кошелёк (см. app/listeners). */
+export const paid = createAction<Order>('checkout/paid');
 
-export const checkoutFx = createEffect(
-  async ({ body, key }: { body: CheckoutIn; key: string }): Promise<{ status: number; order: Order }> => {
-    try {
-      const r = await api.checkout(body, key);
-      return { status: r.status, order: r.data };
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 402 && e.body && typeof e.body === 'object' && 'id' in e.body)
-        return { status: 402, order: e.body as Order };
-      throw e;
-    }
-  },
-);
+const phaseAfter = (o: Order, current: Phase): Phase =>
+  o.status === 'completed' ? 'done' : o.status === 'charging' ? current : 'failed';
 
-export const pollFx = createEffect(async (id: string) => {
-  await new Promise((r) => setTimeout(r, pollDelay.ms));
-  return api.order(id);
-});
-
-const payFx = attach({
-  source: { target: $target, card: $card, key: $key },
-  mapParams: (_: void, { target, card, key }) => ({
-    key,
-    body: {
-      kind: target!.kind,
-      plan_id: target!.plan_id,
-      title_id: target!.title_id,
-      card_number: card.replace(/\D/g, ''),
+export const checkoutSlice = createSlice({
+  name: 'checkout',
+  initialState,
+  reducers: {
+    opened: {
+      // Ключ генерируется в prepare: редьюсер остаётся чистой функцией.
+      reducer(s, a: PayloadAction<{ target: CheckoutTarget; key: string }>) {
+        s.target = a.payload.target;
+        s.key = a.payload.key;
+        s.card = '';
+        s.order = null;
+        s.error = null;
+        s.phase = 'form';
+      },
+      prepare: (target: CheckoutTarget) => ({ payload: { target, key: newKey() } }),
     },
-  }),
-  effect: checkoutFx,
+    closed(s) {
+      s.target = null;
+    },
+    cardChanged(s, a: PayloadAction<string>) {
+      s.card = a.payload;
+    },
+    /** Отказ банка: следующий заход — новый заказ с новым ключом. */
+    retried: {
+      reducer(s, a: PayloadAction<string>) {
+        s.key = a.payload;
+        s.order = null;
+        s.phase = 'form';
+      },
+      prepare: () => ({ payload: newKey() }),
+    },
+    errorCleared(s) {
+      s.error = null;
+    },
+    payStarted(s) {
+      s.phase = 'paying';
+    },
+    payAnswered(s, a: PayloadAction<Order>) {
+      s.order = a.payload;
+      s.phase = phaseAfter(a.payload, 'polling');
+    },
+    payFailed(s, a: PayloadAction<string>) {
+      s.phase = 'form';
+      s.error = a.payload;
+    },
+    polled(s, a: PayloadAction<Order>) {
+      s.order = a.payload;
+      s.phase = phaseAfter(a.payload, s.phase);
+    },
+    pollFailed(s) {
+      s.phase = 'polling';
+    },
+  },
 });
 
-sample({
-  clock: submitted,
-  source: { target: $target, phase: $phase },
-  filter: ({ target, phase }) => target !== null && phase === 'form',
-  fn: () => undefined,
-  target: payFx,
+export const { opened, closed, cardChanged, retried } = checkoutSlice.actions;
+const { errorCleared, payStarted, payAnswered, payFailed, polled, pollFailed } = checkoutSlice.actions;
+
+/** POST /billing/checkout. 402 — не сбой: в теле ответа заказ с причиной отказа. */
+export async function checkoutRequest({
+  body,
+  key,
+}: {
+  body: CheckoutIn;
+  key: string;
+}): Promise<{ status: number; order: Order }> {
+  try {
+    const r = await api.checkout(body, key);
+    return { status: r.status, order: r.data };
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 402 && e.body && typeof e.body === 'object' && 'id' in e.body)
+      return { status: 402, order: e.body as Order };
+    throw e;
+  }
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Пока заказ в обработке и окно открыто — опрашиваем его. */
+const pollOrder = createAsyncThunk('checkout/poll', async (id: string, { getState, dispatch }) => {
+  while ((getState() as RootState).checkout.target !== null) {
+    await sleep(pollDelay.ms);
+    try {
+      const o = await api.order(id);
+      dispatch(polled(o));
+      if (o.status === 'completed') dispatch(paid(o));
+      if (o.status !== 'charging') return;
+    } catch {
+      // Сеть моргнула — заказ никуда не делся, спрашиваем ещё раз.
+      dispatch(pollFailed());
+    }
+  }
 });
 
-$phase
-  .on(payFx, () => 'paying')
-  .on(payFx.doneData, (_, r) =>
-    r.order.status === 'completed' ? 'done' : r.order.status === 'charging' ? 'polling' : 'failed',
-  )
-  .on(payFx.fail, () => 'form')
-  .on(pollFx.doneData, (p, o) => (o.status === 'completed' ? 'done' : o.status === 'charging' ? p : 'failed'))
-  .on(pollFx.fail, () => 'polling');
-
-$order.on(payFx.doneData, (_, r) => r.order).on(pollFx.doneData, (_, o) => o);
-$error.on(payFx.failData, (_, e) => errorMessage(e));
-
-// Отказ банка: следующий заход — новый заказ с новым ключом.
-$key.on(retried, () => newKey());
-
-// Пока заказ в обработке и окно открыто — опрашиваем.
-sample({
-  clock: [payFx.doneData.map((r) => r.order), pollFx.doneData],
-  source: $target,
-  filter: (t, o) => t !== null && o.status === 'charging',
-  fn: (_, o) => o.id,
-  target: pollFx,
-});
-sample({
-  clock: pollFx.fail,
-  source: { target: $target, order: $order },
-  filter: ({ target, order }) => target !== null && order !== null,
-  fn: ({ order }) => order!.id,
-  target: pollFx,
+/** «Оплатить»: заказ с ключом идемпотентности, затем — опрос, если банк не ответил сразу. */
+export const submitted = createAsyncThunk('checkout/submit', async (_: void, { getState, dispatch }) => {
+  dispatch(errorCleared());
+  const { target, card, key, phase } = (getState() as RootState).checkout;
+  if (!target || phase !== 'form') return;
+  dispatch(payStarted());
+  let order: Order;
+  try {
+    ({ order } = await checkoutRequest({
+      key,
+      body: {
+        kind: target.kind,
+        plan_id: target.plan_id,
+        title_id: target.title_id,
+        card_number: card.replace(/\D/g, ''),
+      },
+    }));
+  } catch (e) {
+    dispatch(payFailed(errorMessage(e)));
+    return;
+  }
+  dispatch(payAnswered(order));
+  if (order.status === 'completed') dispatch(paid(order));
+  else if (order.status === 'charging') await dispatch(pollOrder(order.id));
 });
 
-sample({
-  clock: [payFx.doneData.map((r) => r.order), pollFx.doneData],
-  filter: (o) => o.status === 'completed',
-  target: paid,
-});
+export const selectCheckout = (s: RootState) => s.checkout;

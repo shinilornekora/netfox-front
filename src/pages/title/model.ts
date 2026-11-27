@@ -1,55 +1,92 @@
 // Карточка тайтла: сам тайтл для всех, а для зрителя — его права (offer)
 // и состояние просмотра (прогресс, «Смотреть позже»).
-import { combine, createEffect, createEvent, createStore, sample } from 'effector';
-import { createGate } from 'effector-react';
+import { createAsyncThunk, createSelector, createSlice } from '@reduxjs/toolkit';
 import { api } from '@/shared/api/endpoints';
 import type { Offer, Title } from '@/shared/api/types';
-import { createRequest } from '@/shared/lib/request';
-import { errorMessage } from '@/shared/lib/format';
-import { $role } from '@/entities/session/model';
-import { paid } from '@/features/checkout/model';
+import { addRequestCases, createApiThunk, idle, problemText, type RequestState } from '@/shared/lib/request';
+import type { RootState } from '@/shared/lib/redux';
+import { selectRole } from '@/entities/session/model';
 
-export const TitleGate = createGate<{ id: string }>();
+type TitleViewerState = Awaited<ReturnType<typeof api.titleState>>;
 
-export const titleQuery = createRequest((id: string) => api.title(id));
-export const offerQuery = createRequest((id: string) => api.offer(id));
-export const stateQuery = createRequest((id: string) => api.titleState(id));
+export interface TitlePageState {
+  /** id открытой карточки; null — страница закрыта. */
+  id: string | null;
+  title: RequestState<Title>;
+  offer: RequestState<Offer>;
+  state: RequestState<TitleViewerState>;
+  inWatchlist: boolean;
+  watchError: string | null;
+}
 
-export const watchToggled = createEvent();
-export const setWatchFx = createEffect(({ id, on }: { id: string; on: boolean }) => api.setWatch(id, on));
+const initialState: TitlePageState = {
+  id: null,
+  title: idle(),
+  offer: idle(),
+  state: idle(),
+  inWatchlist: false,
+  watchError: null,
+};
 
-const $id = TitleGate.state.map((s) => s.id ?? null);
+export const titleRequested = createApiThunk('title/title', (id: string) => api.title(id));
+export const offerRequested = createApiThunk('title/offer', (id: string) => api.offer(id));
+export const stateRequested = createApiThunk('title/state', (id: string) => api.titleState(id));
+export const setWatch = createApiThunk('title/setWatch', ({ id, on }: { id: string; on: boolean }) =>
+  api.setWatch(id, on),
+);
 
-sample({ clock: TitleGate.open, fn: (p) => p.id, target: titleQuery.start });
-sample({
-  clock: [TitleGate.open, $role.updates],
-  source: { id: $id, role: $role },
-  filter: ({ id, role }) => id !== null && role === 'viewer',
-  fn: ({ id }) => id!,
-  target: [offerQuery.start, stateQuery.start],
+export const titleSlice = createSlice({
+  name: 'title',
+  initialState,
+  reducers: {
+    gateOpened(s, a: { payload: string }) {
+      s.id = a.payload;
+    },
+    titleClosed: () => initialState,
+  },
+  extraReducers: (b) => {
+    b.addCase(stateRequested.fulfilled, (s, a) => void (s.inWatchlist = a.payload.in_watchlist))
+      // «Смотреть позже»: переключается сразу, при ошибке откатывается.
+      .addCase(setWatch.pending, (s, a) => {
+        s.inWatchlist = a.meta.arg.on;
+        s.watchError = null;
+      })
+      .addCase(setWatch.rejected, (s, a) => {
+        s.inWatchlist = !a.meta.arg.on;
+        s.watchError = problemText(a);
+      });
+    addRequestCases(b, titleRequested, (s) => s.title);
+    addRequestCases(b, offerRequested, (s) => s.offer);
+    addRequestCases(b, stateRequested, (s) => s.state);
+  },
 });
-sample({ clock: TitleGate.close, target: [titleQuery.reset, offerQuery.reset, stateQuery.reset] });
 
-// После оплаты права изменились.
-sample({ clock: paid, source: $id, filter: Boolean, target: offerQuery.start });
+export const { titleClosed } = titleSlice.actions;
+const { gateOpened } = titleSlice.actions;
 
-/** «Смотреть позже»: переключается сразу, при ошибке откатывается. */
-export const $inWatchlist = createStore(false)
-  .on(stateQuery.fx.doneData, (_, s) => s.in_watchlist)
-  .on(setWatchFx, (_, p) => p.on)
-  .on(setWatchFx.fail, (_, { params }) => !params.on)
-  .reset(TitleGate.close);
-export const $watchError = createStore<string | null>(null)
-  .on(setWatchFx.failData, (_, e) => errorMessage(e))
-  .reset(setWatchFx);
+/** Права и состояние просмотра — только зрителю. */
+export const viewerDataRequested = createAsyncThunk(
+  'title/viewerData',
+  async (_: void, { dispatch, getState }) => {
+    const s = getState() as RootState;
+    const id = s.title.id;
+    if (id === null || selectRole(s) !== 'viewer') return;
+    await Promise.all([dispatch(offerRequested(id)), dispatch(stateRequested(id))]);
+  },
+);
 
-sample({
-  clock: watchToggled,
-  source: { id: $id, on: $inWatchlist },
-  filter: ({ id }) => id !== null,
-  fn: ({ id, on }) => ({ id: id!, on: !on }),
-  target: setWatchFx,
+export const titleOpened = createAsyncThunk('title/opened', async (id: string, { dispatch }) => {
+  dispatch(gateOpened(id));
+  await Promise.all([dispatch(titleRequested(id)), dispatch(viewerDataRequested())]);
 });
+
+export const watchToggled = createAsyncThunk(
+  'title/watchToggled',
+  async (_: void, { dispatch, getState }) => {
+    const { id, inWatchlist } = (getState() as RootState).title;
+    if (id !== null) await dispatch(setWatch({ id, on: !inWatchlist }));
+  },
+);
 
 export type Action =
   | { type: 'watch'; via: 'subscription' | 'purchase' }
@@ -69,10 +106,15 @@ export function actionsFor(t: Title, o: Offer | null): Action[] {
   return out;
 }
 
-export const $view = combine({
-  title: titleQuery.$data,
-  error: titleQuery.$error,
-  pending: titleQuery.$pending,
-  offer: offerQuery.$data,
-  progress: stateQuery.$data.map((s) => s?.progress ?? null),
-});
+export const selectInWatchlist = (s: RootState) => s.title.inWatchlist;
+export const selectWatchError = (s: RootState) => s.title.watchError;
+export const selectView = createSelector(
+  (s: RootState) => s.title,
+  (t) => ({
+    title: t.title.data,
+    error: t.title.error,
+    pending: t.title.pending,
+    offer: t.offer.data,
+    progress: t.state.data?.progress ?? null,
+  }),
+);

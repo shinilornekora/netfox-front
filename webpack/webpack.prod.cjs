@@ -1,6 +1,6 @@
 // Продакшен-сборка. Оптимизации:
 //  - contenthash в именах файлов → долгий кэш, при релизе меняются только изменившиеся чанки;
-//  - splitChunks: react и effector в отдельных vendor-чанках, они меняются реже кода приложения;
+//  - splitChunks: react и redux в отдельных vendor-чанках, они меняются реже кода приложения;
 //  - runtimeChunk: манифест модулей отдельно, чтобы не инвалидировать vendor-чанки;
 //  - страницы грузятся лениво (React.lazy) → первый экран меньше;
 //  - минификация JS (terser) и CSS, tree shaking (mode=production);
@@ -40,9 +40,9 @@ module.exports = merge(common, {
           name: 'vendor-react',
           priority: 30,
         },
-        effector: {
-          test: /[\\/]node_modules[\\/](effector|effector-react|use-sync-external-store)[\\/]/,
-          name: 'vendor-effector',
+        redux: {
+          test: /[\\/]node_modules[\\/](@reduxjs|redux|redux-thunk|react-redux|immer|reselect|use-sync-external-store)[\\/]/,
+          name: 'vendor-redux',
           priority: 20,
         },
       },

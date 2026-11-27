@@ -1,19 +1,21 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { useUnit } from 'effector-react';
-import { loginFx } from '@/entities/session/model';
+import { login as loginThunk } from '@/entities/session/model';
+import { useAppDispatch, useAppSelector } from '@/shared/lib/redux';
 import { Alert, Button, Card, TextField } from '@/shared/ui';
 import * as m from './model';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, pending, login, reset] = useUnit([m.$authError, m.$pending, loginFx, m.formReset]);
-  useEffect(() => () => reset(), [reset]);
+  const dispatch = useAppDispatch();
+  const error = useAppSelector(m.selectAuthError);
+  const pending = useAppSelector(m.selectLoginPending);
+  useEffect(() => () => void dispatch(m.formReset()), [dispatch]);
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    login({ email, password }).catch(() => undefined);
+    void dispatch(loginThunk({ email, password }));
   };
 
   return (

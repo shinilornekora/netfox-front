@@ -1,10 +1,10 @@
 // Витрина: фильтры, сортировка и keyset-пагинация («Показать ещё» по next_cursor).
-import { combine, createEvent, createStore, sample } from 'effector';
-import { createGate } from 'effector-react';
+import { createAsyncThunk, createSelector, createSlice, type PayloadAction } from '@reduxjs/toolkit';
 import { api, type TitleQuery } from '@/shared/api/endpoints';
-import type { Kind, Title } from '@/shared/api/types';
-import { createRequest } from '@/shared/lib/request';
-import { $role } from '@/entities/session/model';
+import type { Genre, Kind, Progress, Title, WithTitle } from '@/shared/api/types';
+import { addRequestCases, createApiThunk, idle, problemText, type RequestState } from '@/shared/lib/request';
+import type { RootState } from '@/shared/lib/redux';
+import { selectRole } from '@/entities/session/model';
 
 export interface Filters {
   q: string;
@@ -17,71 +17,128 @@ export interface Filters {
 export const initialFilters: Filters = { q: '', kind: '', genre: '', access: '', sort: '' };
 export const PAGE_SIZE = 12;
 
-export const CatalogGate = createGate<void>();
+export interface CatalogState {
+  /** Страница открыта (аналог gate): от этого зависят реакции на смену роли. */
+  open: boolean;
+  filters: Filters;
+  items: Title[];
+  cursor: string | null;
+  pending: boolean;
+  morePending: boolean;
+  error: string | null;
+  genres: RequestState<{ items: Genre[] }>;
+  continue: RequestState<{ items: WithTitle<Progress>[] }>;
+}
 
-export const filterChanged = createEvent<Partial<Filters>>();
-export const searchSubmitted = createEvent();
-export const filtersReset = createEvent();
-export const moreRequested = createEvent();
-
-export const $filters = createStore<Filters>(initialFilters)
-  .on(filterChanged, (f, patch) => ({ ...f, ...patch }))
-  .reset(filtersReset);
-
-/** Первая страница по текущим фильтрам. */
-export const pageQuery = createRequest((q: TitleQuery) => api.titles(q));
-/** Следующие страницы: дописываются к ленте. */
-export const moreQuery = createRequest((q: TitleQuery) => api.titles(q));
-export const genresQuery = createRequest((_: void) => api.genres());
-export const continueQuery = createRequest((_: void) => api.continueWatching());
-
-export const $items = createStore<Title[]>([])
-  .on(pageQuery.fx.doneData, (_, p) => p.items)
-  .on(moreQuery.fx.doneData, (list, p) => {
-    // Тайтл мог сместиться между страницами (опубликовали новый) — без дублей.
-    const seen = new Set(list.map((t) => t.id));
-    return [...list, ...p.items.filter((t) => !seen.has(t.id))];
-  });
-export const $cursor = createStore<string | null>(null)
-  // Последняя страница: gateway отдаёт next_cursor пустой строкой.
-  .on(pageQuery.fx.doneData, (_, p) => p.next_cursor || null)
-  .on(moreQuery.fx.doneData, (_, p) => p.next_cursor || null);
-export const $hasMore = $cursor.map(Boolean);
-export const $genres = genresQuery.$data.map((d) => (d?.items ?? []).filter((g) => g.count > 0));
-export const $continue = continueQuery.$data.map((d) => d?.items ?? []);
+const initialState: CatalogState = {
+  open: false,
+  filters: initialFilters,
+  items: [],
+  cursor: null,
+  pending: false,
+  morePending: false,
+  error: null,
+  genres: idle(),
+  continue: idle(),
+};
 
 const toQuery = (f: Filters): TitleQuery => ({ ...f, limit: PAGE_SIZE });
+const catalog = (s: unknown) => (s as RootState).catalog;
 
-sample({
-  clock: [CatalogGate.open, searchSubmitted, filtersReset],
-  source: $filters,
-  fn: toQuery,
-  target: pageQuery.start,
+/** Первая страница по текущим фильтрам. */
+export const pageRequested = createApiThunk('catalog/page', (_: void, { getState }) =>
+  api.titles(toQuery(catalog(getState()).filters)),
+);
+/** Следующие страницы: дописываются к ленте. */
+export const nextPageRequested = createApiThunk('catalog/more', (_: void, { getState }) => {
+  const { filters, cursor } = catalog(getState());
+  return api.titles({ ...toQuery(filters), cursor: cursor ?? undefined });
+});
+export const genresRequested = createApiThunk('catalog/genres', () => api.genres());
+export const continueRequested = createApiThunk('catalog/continue', () => api.continueWatching());
+
+export const catalogSlice = createSlice({
+  name: 'catalog',
+  initialState,
+  reducers: {
+    gateOpened: (s) => void (s.open = true),
+    gateClosed: (s) => void (s.open = false),
+    filterChanged(s, a: PayloadAction<Partial<Filters>>) {
+      s.filters = { ...s.filters, ...a.payload };
+    },
+    filtersCleared(s) {
+      s.filters = initialFilters;
+    },
+  },
+  extraReducers: (b) => {
+    b.addCase(pageRequested.pending, (s) => {
+      s.pending = true;
+      s.error = null;
+    })
+      .addCase(pageRequested.fulfilled, (s, a) => {
+        s.pending = false;
+        s.items = a.payload.items;
+        // Последняя страница: gateway отдаёт next_cursor пустой строкой.
+        s.cursor = a.payload.next_cursor || null;
+      })
+      .addCase(pageRequested.rejected, (s, a) => {
+        s.pending = false;
+        s.error = problemText(a);
+      })
+      .addCase(nextPageRequested.pending, (s) => void (s.morePending = true))
+      .addCase(nextPageRequested.rejected, (s) => void (s.morePending = false))
+      .addCase(nextPageRequested.fulfilled, (s, a) => {
+        s.morePending = false;
+        // Тайтл мог сместиться между страницами (опубликовали новый) — без дублей.
+        const seen = new Set(s.items.map((t) => t.id));
+        s.items.push(...a.payload.items.filter((t) => !seen.has(t.id)));
+        s.cursor = a.payload.next_cursor || null;
+      });
+    addRequestCases(b, genresRequested, (s) => s.genres);
+    addRequestCases(b, continueRequested, (s) => s.continue);
+  },
 });
 
-sample({
-  clock: moreRequested,
-  source: { f: $filters, cursor: $cursor, busy: moreQuery.$pending },
-  filter: ({ cursor, busy }) => cursor !== null && !busy,
-  fn: ({ f, cursor }): TitleQuery => ({ ...toQuery(f), cursor: cursor ?? undefined }),
-  target: moreQuery.start,
+export const { filterChanged, gateClosed: catalogClosed } = catalogSlice.actions;
+const { gateOpened, filtersCleared } = catalogSlice.actions;
+
+/** Открытие витрины: первая страница, жанры и (для зрителя) «Продолжить просмотр». */
+export const catalogOpened = createAsyncThunk('catalog/opened', async (_: void, { dispatch, getState }) => {
+  dispatch(gateOpened());
+  const jobs: Promise<unknown>[] = [dispatch(pageRequested()), dispatch(genresRequested())];
+  if (selectRole(getState() as RootState) === 'viewer') jobs.push(dispatch(continueRequested()));
+  await Promise.all(jobs);
 });
 
-sample({ clock: CatalogGate.open, fn: () => undefined, target: genresQuery.start });
+export const searchSubmitted = () => pageRequested();
 
-// «Продолжить просмотр» — только у зрителя.
-sample({
-  clock: [CatalogGate.open, $role.updates],
-  source: { role: $role, open: CatalogGate.status },
-  filter: ({ role, open }) => open && role === 'viewer',
-  fn: () => undefined,
-  target: continueQuery.start,
+export const filtersReset = createAsyncThunk('catalog/reset', async (_: void, { dispatch }) => {
+  dispatch(filtersCleared());
+  await dispatch(pageRequested());
 });
 
-export const $view = combine({
-  items: $items,
-  pending: pageQuery.$pending,
-  morePending: moreQuery.$pending,
-  error: pageQuery.$error,
-  hasMore: $hasMore,
+/** «Показать ещё» — только если есть курсор и предыдущая догрузка закончилась. */
+export const moreRequested = createAsyncThunk('catalog/showMore', async (_: void, { dispatch, getState }) => {
+  const { cursor, morePending } = catalog(getState());
+  if (cursor !== null && !morePending) await dispatch(nextPageRequested());
 });
+
+export const selectFilters = (s: RootState) => s.catalog.filters;
+export const selectItems = (s: RootState) => s.catalog.items;
+export const selectHasMore = (s: RootState) => s.catalog.cursor !== null;
+export const selectGenres = createSelector(
+  (s: RootState) => s.catalog.genres.data,
+  (d) => (d?.items ?? []).filter((g) => g.count > 0),
+);
+const noContinue: WithTitle<Progress>[] = [];
+export const selectContinue = (s: RootState) => s.catalog.continue.data?.items ?? noContinue;
+export const selectView = createSelector(
+  (s: RootState) => s.catalog,
+  (c) => ({
+    items: c.items,
+    pending: c.pending,
+    morePending: c.morePending,
+    error: c.error,
+    hasMore: c.cursor !== null,
+  }),
+);

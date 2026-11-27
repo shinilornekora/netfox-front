@@ -1,7 +1,7 @@
 import { defineWorkspace } from 'vitest/config';
 
-// unit — модели Effector, утилиты, HTTP-клиент, отдельные компоненты.
-// integration — всё приложение целиком (роутер + Effector + UI) против
+// unit — слайсы и thunk-и Redux, утилиты, HTTP-клиент, отдельные компоненты.
+// integration — всё приложение целиком (роутер + Redux + UI) против
 // фейкового gateway на MSW: сценарии ролей клиента, менеджера и админа.
 export default defineWorkspace([
   {

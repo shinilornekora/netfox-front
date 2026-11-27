@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { allSettled, fork } from 'effector';
 import { http, HttpResponse } from 'msw';
 import { server } from '@/test/setup';
 import { db, signIn } from '@/test/gateway';
 import { title } from '@/test/fixtures';
-import { $user } from '@/entities/session/model';
+import { makeStore } from '@/app/store';
 import * as m from './model';
 
 const offer = (over = {}) => ({
@@ -43,17 +42,17 @@ describe('действия на карточке тайтла', () => {
 describe('модель карточки', () => {
   it('зрителю грузит права и состояние просмотра', async () => {
     signIn('u-anna');
-    const scope = fork({ values: [[$user, db.users[0]!]] });
-    await allSettled(m.TitleGate.open, { scope, params: { id: 't-general' } });
-    expect(scope.getState(m.titleQuery.$data)?.name).toBe('Генерал');
-    expect(scope.getState(m.offerQuery.$data)?.owned).toBe(true);
-    expect(scope.getState(m.$view).progress?.position_sec).toBe(1800);
+    const store = makeStore({ session: { status: 'authenticated', user: db.users[0]! } });
+    await store.dispatch(m.titleOpened('t-general'));
+    expect(store.getState().title.title.data?.name).toBe('Генерал');
+    expect(store.getState().title.offer.data?.owned).toBe(true);
+    expect(m.selectView(store.getState()).progress?.position_sec).toBe(1800);
   });
 
   it('гостю права не запрашивает', async () => {
-    const scope = fork();
-    await allSettled(m.TitleGate.open, { scope, params: { id: 't-general' } });
-    expect(scope.getState(m.offerQuery.$data)).toBeNull();
+    const store = makeStore();
+    await store.dispatch(m.titleOpened('t-general'));
+    expect(store.getState().title.offer.data).toBeNull();
   });
 
   it('«Смотреть позже» откатывается, если сервер не принял', async () => {
@@ -63,11 +62,11 @@ describe('модель карточки', () => {
         HttpResponse.json({ status: 503, code: 'unavailable', title: 'Сервис недоступен' }, { status: 503 }),
       ),
     );
-    const scope = fork({ values: [[$user, db.users[0]!]] });
-    await allSettled(m.TitleGate.open, { scope, params: { id: 't-metropolis' } });
-    expect(scope.getState(m.$inWatchlist)).toBe(false);
-    await allSettled(m.watchToggled, { scope });
-    expect(scope.getState(m.$inWatchlist)).toBe(false);
-    expect(scope.getState(m.$watchError)).toBe('Сервис недоступен');
+    const store = makeStore({ session: { status: 'authenticated', user: db.users[0]! } });
+    await store.dispatch(m.titleOpened('t-metropolis'));
+    expect(m.selectInWatchlist(store.getState())).toBe(false);
+    await store.dispatch(m.watchToggled());
+    expect(m.selectInWatchlist(store.getState())).toBe(false);
+    expect(m.selectWatchError(store.getState())).toBe('Сервис недоступен');
   });
 });

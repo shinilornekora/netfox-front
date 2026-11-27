@@ -1,21 +1,52 @@
-import { sample } from 'effector';
-import { createGate } from 'effector-react';
+// Тарифы подписки и (для зрителя) текущая подписка из кошелька.
+import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import { api } from '@/shared/api/endpoints';
-import { createRequest } from '@/shared/lib/request';
-import { $role } from '@/entities/session/model';
-import { paid } from '@/features/checkout/model';
+import type { Plan, Wallet } from '@/shared/api/types';
+import { addRequestCases, createApiThunk, idle, type RequestState } from '@/shared/lib/request';
+import type { RootState } from '@/shared/lib/redux';
+import { selectRole } from '@/entities/session/model';
 
-export const PlansGate = createGate<void>();
-export const plansQuery = createRequest((_: void) => api.plans());
-export const walletQuery = createRequest((_: void) => api.wallet());
+export interface PlansState {
+  open: boolean;
+  plans: RequestState<{ items: Plan[] }>;
+  wallet: RequestState<Wallet>;
+}
 
-sample({ clock: PlansGate.open, fn: () => undefined, target: plansQuery.start });
-sample({
-  clock: [PlansGate.open, $role.updates, paid],
-  source: { role: $role, open: PlansGate.status },
-  filter: ({ role, open }) => open && role === 'viewer',
-  fn: () => undefined,
-  target: walletQuery.start,
+const initialState: PlansState = { open: false, plans: idle(), wallet: idle() };
+
+export const plansRequested = createApiThunk('plans/plans', () => api.plans());
+export const walletRequested = createApiThunk('plans/wallet', () => api.wallet());
+
+export const plansSlice = createSlice({
+  name: 'plans',
+  initialState,
+  reducers: {
+    gateOpened: (s) => void (s.open = true),
+    plansClosed: (s) => void (s.open = false),
+  },
+  extraReducers: (b) => {
+    addRequestCases(b, plansRequested, (s) => s.plans);
+    addRequestCases(b, walletRequested, (s) => s.wallet);
+  },
 });
 
-export const $subscription = walletQuery.$data.map((w) => w?.subscription ?? null);
+export const { plansClosed } = plansSlice.actions;
+const { gateOpened } = plansSlice.actions;
+
+/** Кошелёк — только у зрителя и только пока страница открыта. */
+export const walletRefreshed = createAsyncThunk(
+  'plans/walletRefreshed',
+  async (_: void, { dispatch, getState }) => {
+    const s = getState() as RootState;
+    if (s.plans.open && selectRole(s) === 'viewer') await dispatch(walletRequested());
+  },
+);
+
+export const plansOpened = createAsyncThunk('plans/opened', async (_: void, { dispatch }) => {
+  dispatch(gateOpened());
+  await Promise.all([dispatch(plansRequested()), dispatch(walletRefreshed())]);
+});
+
+export const selectPlans = (s: RootState) => s.plans.plans.data;
+export const selectPlansError = (s: RootState) => s.plans.plans.error;
+export const selectSubscription = (s: RootState) => s.plans.wallet.data?.subscription ?? null;

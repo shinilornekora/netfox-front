@@ -1,7 +1,7 @@
 import { Suspense, useContext, useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { useUnit } from 'effector-react';
-import { $role, $user, logoutFx } from '@/entities/session/model';
+import { logout, selectRole, selectUser } from '@/entities/session/model';
+import { useAppDispatch, useAppSelector } from '@/shared/lib/redux';
 import { CheckoutModal } from '@/features/checkout/CheckoutModal';
 import { roleLabel } from '@/shared/lib/format';
 import { Button, Spinner } from '@/shared/ui';
@@ -20,7 +20,9 @@ function Logo() {
  * верхняя полоска с кнопкой, по которой меню выезжает поверх контента.
  */
 export function Layout() {
-  const [user, role, logout] = useUnit([$user, $role, logoutFx]);
+  const user = useAppSelector(selectUser);
+  const role = useAppSelector(selectRole);
+  const dispatch = useAppDispatch();
   const navigate = useNavigate();
   const location = useLocation();
   const extra = useContext(SidebarSlot);
@@ -107,7 +109,7 @@ export function Layout() {
               <Button
                 small
                 onClick={() => {
-                  logout().finally(() => navigate('/'));
+                  void dispatch(logout()).finally(() => navigate('/'));
                 }}
               >
                 Выйти

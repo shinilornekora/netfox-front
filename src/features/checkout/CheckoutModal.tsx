@@ -1,15 +1,19 @@
-import { useUnit } from 'effector-react';
 import type { FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { cards } from '@/shared/lib/testCards';
 import { formatCard, formatMoney } from '@/shared/lib/format';
+import { useAppDispatch, useAppSelector } from '@/shared/lib/redux';
 import { Alert, Button, Modal, Spinner, TextField } from '@/shared/ui';
 import * as m from './model';
 
 /** Окно оплаты: подписка или покупка фильма. Рисуется один раз в Layout. */
 export function CheckoutModal() {
-  const [target, card, phase, order, error] = useUnit([m.$target, m.$card, m.$phase, m.$order, m.$error]);
-  const [close, change, submit, retry] = useUnit([m.closed, m.cardChanged, m.submitted, m.retried]);
+  const { target, card, phase, order, error } = useAppSelector(m.selectCheckout);
+  const dispatch = useAppDispatch();
+  const close = () => dispatch(m.closed());
+  const change = (c: string) => dispatch(m.cardChanged(c));
+  const submit = () => void dispatch(m.submitted());
+  const retry = () => dispatch(m.retried());
   if (!target) return null;
 
   const onSubmit = (e: FormEvent) => {

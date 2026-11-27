@@ -1,20 +1,23 @@
-import { useGate, useUnit } from 'effector-react';
+import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { $role } from '@/entities/session/model';
+import { selectRole } from '@/entities/session/model';
+import { useAppDispatch, useAppSelector } from '@/shared/lib/redux';
 import { opened as checkoutOpened } from '@/features/checkout/model';
 import { formatDate, formatMoney, plural } from '@/shared/lib/format';
 import { Alert, Button, Card, Spinner } from '@/shared/ui';
 import * as m from './model';
 
 export default function PlansPage() {
-  useGate(m.PlansGate);
-  const [plans, error, sub, role, open] = useUnit([
-    m.plansQuery.$data,
-    m.plansQuery.$error,
-    m.$subscription,
-    $role,
-    checkoutOpened,
-  ]);
+  const dispatch = useAppDispatch();
+  useEffect(() => {
+    void dispatch(m.plansOpened());
+    return () => void dispatch(m.plansClosed());
+  }, [dispatch]);
+  const plans = useAppSelector(m.selectPlans);
+  const error = useAppSelector(m.selectPlansError);
+  const sub = useAppSelector(m.selectSubscription);
+  const role = useAppSelector(selectRole);
+  const open = (t: Parameters<typeof checkoutOpened>[0]) => dispatch(checkoutOpened(t));
 
   return (
     <div className="page stack">

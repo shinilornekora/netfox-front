@@ -1,7 +1,7 @@
-import { useGate, useUnit } from 'effector-react';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { formatClock } from '@/shared/lib/format';
+import { useAppDispatch, useAppSelector } from '@/shared/lib/redux';
 import { Alert, Card, Spinner } from '@/shared/ui';
 import * as m from './model';
 
@@ -11,13 +11,16 @@ export default function WatchPage() {
   const { id = '' } = useParams();
   const [params] = useSearchParams();
   const ep = params.get('ep') ?? undefined;
-  useGate(m.WatchGate, { id, ep });
-  const [start, error, pending, report] = useUnit([
-    m.$start,
-    m.$startError,
-    m.startFx.pending,
-    m.positionReported,
-  ]);
+  const dispatch = useAppDispatch();
+  useEffect(() => {
+    void dispatch(m.watchOpened({ id, ep }));
+    return () => void dispatch(m.watchClosed());
+  }, [dispatch, id, ep]);
+  const { start, startError: error, pending } = useAppSelector(m.selectWatch);
+  const report = useCallback(
+    (p: { position: number; duration: number }) => void dispatch(m.positionReported(p)),
+    [dispatch],
+  );
   const video = useRef<HTMLVideoElement>(null);
 
   // Пинг прогресса, пока видео играет; плюс на паузе, в конце и при уходе со страницы.

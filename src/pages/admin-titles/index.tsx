@@ -1,53 +1,21 @@
-import { createEffect, createEvent, createStore, sample } from 'effector';
-import { createGate, useGate, useUnit } from 'effector-react';
-import type { FormEvent } from 'react';
+import { useEffect, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { api } from '@/shared/api/endpoints';
-import type { Title, TitleStatus } from '@/shared/api/types';
-import { createRequest } from '@/shared/lib/request';
+import type { TitleStatus } from '@/shared/api/types';
 import { formatDateTime, formatMoney, kindLabel, titleStatusLabel } from '@/shared/lib/format';
+import { useAppDispatch, useAppSelector } from '@/shared/lib/redux';
 import { Alert, Badge, Button, Card, Empty, Select, Spinner, TextField } from '@/shared/ui';
-
-export const AdminTitlesGate = createGate<void>();
-export const filterChanged = createEvent<{ q?: string; status?: TitleStatus | '' }>();
-export const searched = createEvent();
-export const $filter = createStore<{ q: string; status: TitleStatus | '' }>({ q: '', status: '' }).on(
-  filterChanged,
-  (f, p) => ({ ...f, ...p }),
-);
-export const listQuery = createRequest((f: { q: string; status: string }) => api.adminTitles(f));
-sample({ clock: [AdminTitlesGate.open, searched], source: $filter, target: listQuery.start });
-
-// Админский список отдаётся по 50, дальше — по next_cursor.
-export const moreRequested = createEvent();
-export const moreFx = createEffect((q: { q: string; status: string; cursor: string }) => api.adminTitles(q));
-export const $items = createStore<Title[]>([])
-  .on(listQuery.fx.doneData, (_, r) => r.items)
-  .on(moreFx.doneData, (list, r) => [...list, ...r.items]);
-export const $cursor = createStore('')
-  .on(listQuery.fx.doneData, (_, r) => r.next_cursor || '')
-  .on(moreFx.doneData, (_, r) => r.next_cursor || '');
-sample({
-  clock: moreRequested,
-  source: { f: $filter, cursor: $cursor },
-  filter: ({ cursor }) => cursor !== '',
-  fn: ({ f, cursor }) => ({ ...f, cursor }),
-  target: moreFx,
-});
+import * as m from './model';
 
 const tone = { draft: 'info', published: 'ok', withdrawn: 'warn' } as const;
 
 export default function AdminTitlesPage() {
-  useGate(AdminTitlesGate);
-  const [filter, change, search, data, pending, error] = useUnit([
-    $filter,
-    filterChanged,
-    searched,
-    listQuery.$data,
-    listQuery.$pending,
-    listQuery.$error,
-  ]);
-  const [items, cursor, more] = useUnit([$items, $cursor, moreRequested]);
+  const dispatch = useAppDispatch();
+  useEffect(() => void dispatch(m.adminTitlesOpened()), [dispatch]);
+  const { filter, list, items, cursor } = useAppSelector(m.selectAdminTitles);
+  const { data, pending, error } = list;
+  const change = (p: Partial<m.AdminFilter>) => dispatch(m.filterChanged(p));
+  const search = () => void dispatch(m.searched());
+  const more = () => void dispatch(m.moreRequested());
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
     search();

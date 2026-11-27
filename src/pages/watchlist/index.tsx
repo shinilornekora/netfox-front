@@ -1,25 +1,13 @@
-import { createEffect, createStore, sample } from 'effector';
-import { createGate, useGate, useUnit } from 'effector-react';
+import { useEffect } from 'react';
 import { TitleCard } from '@/entities/title/TitleCard';
-import { api } from '@/shared/api/endpoints';
-import type { WatchItem, WithTitle } from '@/shared/api/types';
-import { createRequest } from '@/shared/lib/request';
+import { useAppDispatch, useAppSelector } from '@/shared/lib/redux';
 import { Alert, Button, Empty, Spinner } from '@/shared/ui';
-
-export const WatchlistGate = createGate<void>();
-export const listQuery = createRequest((_: void) => api.watchlist());
-export const removeFx = createEffect(async (id: string) => {
-  await api.setWatch(id, false);
-  return id;
-});
-export const $items = createStore<WithTitle<WatchItem>[]>([])
-  .on(listQuery.fx.doneData, (_, r) => r.items)
-  .on(removeFx.doneData, (list, id) => list.filter((i) => i.title_id !== id));
-sample({ clock: WatchlistGate.open, fn: () => undefined, target: listQuery.start });
+import * as m from './model';
 
 export default function WatchlistPage() {
-  useGate(WatchlistGate);
-  const [items, pending, error, remove] = useUnit([$items, listQuery.$pending, listQuery.$error, removeFx]);
+  const dispatch = useAppDispatch();
+  useEffect(() => void dispatch(m.watchlistOpened()), [dispatch]);
+  const { items, pending, error } = useAppSelector(m.selectWatchlist);
   return (
     <div className="page stack">
       <h1>Смотреть позже</h1>
@@ -35,7 +23,7 @@ export default function WatchlistPage() {
               key={i.title_id}
               title={i.title}
               footer={
-                <Button small onClick={() => remove(i.title_id).catch(() => undefined)}>
+                <Button small onClick={() => void dispatch(m.removed(i.title_id))}>
                   Убрать
                 </Button>
               }

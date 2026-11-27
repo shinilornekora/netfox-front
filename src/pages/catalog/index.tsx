@@ -1,20 +1,26 @@
-import { useGate, useUnit } from 'effector-react';
-import type { FormEvent } from 'react';
+import { useEffect, type FormEvent } from 'react';
 import { TitleCard } from '@/entities/title/TitleCard';
-import { $role } from '@/entities/session/model';
+import { selectRole } from '@/entities/session/model';
+import { useAppDispatch, useAppSelector } from '@/shared/lib/redux';
 import { kindLabel } from '@/shared/lib/format';
 import { Alert, Button, Card, Empty, Select, Spinner, TextField } from '@/shared/ui';
 import * as m from './model';
 
 export default function CatalogPage() {
-  useGate(m.CatalogGate);
-  const [filters, view, genres, cont, role] = useUnit([m.$filters, m.$view, m.$genres, m.$continue, $role]);
-  const [change, submit, reset, more] = useUnit([
-    m.filterChanged,
-    m.searchSubmitted,
-    m.filtersReset,
-    m.moreRequested,
-  ]);
+  const dispatch = useAppDispatch();
+  useEffect(() => {
+    void dispatch(m.catalogOpened());
+    return () => void dispatch(m.catalogClosed());
+  }, [dispatch]);
+  const filters = useAppSelector(m.selectFilters);
+  const view = useAppSelector(m.selectView);
+  const genres = useAppSelector(m.selectGenres);
+  const cont = useAppSelector(m.selectContinue);
+  const role = useAppSelector(selectRole);
+  const change = (patch: Partial<m.Filters>) => dispatch(m.filterChanged(patch));
+  const submit = () => void dispatch(m.searchSubmitted());
+  const reset = () => void dispatch(m.filtersReset());
+  const more = () => void dispatch(m.moreRequested());
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();

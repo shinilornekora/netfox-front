@@ -1,68 +1,126 @@
 // Редактор тайтла (админ). Каждое изменение несёт revision: если тайтл
 // успели поправить в другой вкладке, сервер ответит 409 и ничего не затрёт.
-import { createEffect, createEvent, createStore, sample } from 'effector';
-import { createGate } from 'effector-react';
+import { createAsyncThunk, createSlice, isAnyOf } from '@reduxjs/toolkit';
 import { api, type EpisodeIn } from '@/shared/api/endpoints';
 import type { Title, TitleFields } from '@/shared/api/types';
-import { errorFields, errorMessage } from '@/shared/lib/format';
+import { createApiThunk, problemText } from '@/shared/lib/request';
+import type { RootState } from '@/shared/lib/redux';
 
-export const EditGate = createGate<{ id: string | null }>();
+export interface TitleEditState {
+  title: Title | null;
+  loadError: string | null;
+  /** Ошибка последнего действия (сохранить, опубликовать, серия…). */
+  error: string | null;
+  /** Ошибки полей формы из Problem.errors. */
+  fields: Record<string, string>;
+  notice: string | null;
+}
 
-export const loadFx = createEffect(api.title);
-export const createFx = createEffect(api.createTitle);
-export const saveFx = createEffect(({ id, ...b }: TitleFields & { id: string; revision: number }) =>
-  api.editTitle(id, b),
+const initialState: TitleEditState = { title: null, loadError: null, error: null, fields: {}, notice: null };
+
+export const loadTitle = createApiThunk('titleEdit/load', (id: string) => api.title(id));
+export const createTitle = createApiThunk('titleEdit/create', (b: TitleFields) => api.createTitle(b));
+export const saveTitle = createApiThunk(
+  'titleEdit/save',
+  ({ id, ...b }: TitleFields & { id: string; revision: number }) => api.editTitle(id, b),
 );
-export const publishFx = createEffect((t: Title) => api.publishTitle(t.id, t.revision));
-export const withdrawFx = createEffect(({ t, reason }: { t: Title; reason: string }) =>
-  api.withdrawTitle(t.id, t.revision, reason),
+export const publishTitle = createApiThunk('titleEdit/publish', (t: Title) =>
+  api.publishTitle(t.id, t.revision),
 );
-export const deleteFx = createEffect((id: string) => api.deleteTitle(id));
-export const saveEpisodeFx = createEffect(({ titleId, ep }: { titleId: string; ep: EpisodeIn }) =>
-  api.saveEpisode(titleId, ep),
+export const withdrawTitle = createApiThunk(
+  'titleEdit/withdraw',
+  ({ t, reason }: { t: Title; reason: string }) => api.withdrawTitle(t.id, t.revision, reason),
 );
-export const deleteEpisodeFx = createEffect(({ titleId, id }: { titleId: string; id: string }) =>
-  api.deleteEpisode(titleId, id),
-);
-
-export const messageShown = createEvent<string>();
-
-const mutations = [createFx, saveFx, publishFx, withdrawFx, deleteFx, saveEpisodeFx, deleteEpisodeFx];
-
-export const $title = createStore<Title | null>(null)
-  .on(
-    [loadFx.doneData, createFx.doneData, saveFx.doneData, publishFx.doneData, withdrawFx.doneData],
-    (_, t) => t,
-  )
-  .reset(EditGate.close);
-export const $loadError = createStore<string | null>(null)
-  .on(loadFx.failData, (_, e) => errorMessage(e))
-  .reset(EditGate.close, loadFx);
-export const $error = createStore<string | null>(null)
-  .on(
-    mutations.map((fx) => fx.failData),
-    (_, e) => errorMessage(e),
-  )
-  .reset(EditGate.close, ...mutations);
-export const $fields = createStore<Record<string, string>>({})
-  .on([createFx.failData, saveFx.failData, publishFx.failData, saveEpisodeFx.failData], (_, e) =>
-    errorFields(e),
-  )
-  .reset(EditGate.close, createFx, saveFx, publishFx, saveEpisodeFx);
-export const $notice = createStore<string | null>(null)
-  .on(messageShown, (_, m) => m)
-  .on(saveFx.done, () => 'Сохранено')
-  .on(publishFx.done, () => 'Опубликовано — тайтл появился на витрине')
-  .on(withdrawFx.done, () => 'Снят с показа')
-  .reset(EditGate.close, createFx, deleteFx, saveEpisodeFx, deleteEpisodeFx, saveFx, publishFx, withdrawFx);
-
-sample({ clock: EditGate.open, filter: (p) => p.id !== null, fn: (p) => p.id!, target: loadFx });
+export const deleteTitle = createApiThunk('titleEdit/delete', (id: string) => api.deleteTitle(id));
 // Серии меняют их список (и счётчик) — перечитываем тайтл целиком, чтобы взять новую ревизию.
-sample({
-  clock: [saveEpisodeFx.done, deleteEpisodeFx.done],
-  fn: ({ params }) => params.titleId,
-  target: loadFx,
+export const saveEpisode = createApiThunk(
+  'titleEdit/saveEpisode',
+  async ({ titleId, ep }: { titleId: string; ep: EpisodeIn }, { dispatch }) => {
+    const r = await api.saveEpisode(titleId, ep);
+    void dispatch(loadTitle(titleId));
+    return r;
+  },
+);
+export const deleteEpisode = createApiThunk(
+  'titleEdit/deleteEpisode',
+  async ({ titleId, id }: { titleId: string; id: string }, { dispatch }) => {
+    await api.deleteEpisode(titleId, id);
+    void dispatch(loadTitle(titleId));
+  },
+);
+
+/** Любое изменение тайтла или серий. */
+const mutationPending = isAnyOf(
+  createTitle.pending,
+  saveTitle.pending,
+  publishTitle.pending,
+  withdrawTitle.pending,
+  deleteTitle.pending,
+  saveEpisode.pending,
+  deleteEpisode.pending,
+);
+const mutationRejected = isAnyOf(
+  createTitle.rejected,
+  saveTitle.rejected,
+  publishTitle.rejected,
+  withdrawTitle.rejected,
+  deleteTitle.rejected,
+  saveEpisode.rejected,
+  deleteEpisode.rejected,
+);
+/** Действия, у которых сервер может вернуть ошибки полей формы. */
+const fieldsPending = isAnyOf(
+  createTitle.pending,
+  saveTitle.pending,
+  publishTitle.pending,
+  saveEpisode.pending,
+);
+const fieldsRejected = isAnyOf(
+  createTitle.rejected,
+  saveTitle.rejected,
+  publishTitle.rejected,
+  saveEpisode.rejected,
+);
+
+export const titleEditSlice = createSlice({
+  name: 'titleEdit',
+  initialState,
+  reducers: {
+    editClosed: () => initialState,
+  },
+  extraReducers: (b) =>
+    b
+      .addCase(loadTitle.pending, (s) => void (s.loadError = null))
+      .addCase(loadTitle.rejected, (s, a) => void (s.loadError = problemText(a)))
+      .addCase(saveTitle.fulfilled, (s) => void (s.notice = 'Сохранено'))
+      .addCase(publishTitle.fulfilled, (s) => void (s.notice = 'Опубликовано — тайтл появился на витрине'))
+      .addCase(withdrawTitle.fulfilled, (s) => void (s.notice = 'Снят с показа'))
+      .addMatcher(
+        isAnyOf(
+          loadTitle.fulfilled,
+          createTitle.fulfilled,
+          saveTitle.fulfilled,
+          publishTitle.fulfilled,
+          withdrawTitle.fulfilled,
+        ),
+        (s, a) => void (s.title = a.payload),
+      )
+      .addMatcher(mutationPending, (s) => {
+        s.error = null;
+        s.notice = null;
+      })
+      .addMatcher(fieldsPending, (s) => void (s.fields = {}))
+      .addMatcher(mutationRejected, (s, a) => void (s.error = problemText(a)))
+      .addMatcher(fieldsRejected, (s, a) => void (s.fields = a.payload?.fields ?? {})),
 });
+
+export const { editClosed } = titleEditSlice.actions;
+
+export const editOpened = createAsyncThunk('titleEdit/opened', async (id: string | null, { dispatch }) => {
+  if (id !== null) await dispatch(loadTitle(id));
+});
+
+export const selectTitleEdit = (s: RootState) => s.titleEdit;
 
 export const emptyFields: TitleFields = {
   kind: 'film',
