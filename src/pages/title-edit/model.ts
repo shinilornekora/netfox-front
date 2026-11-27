@@ -1,7 +1,12 @@
-// Редактор тайтла (админ). Каждое изменение несёт revision: если тайтл
-// успели поправить в другой вкладке, сервер ответит 409 и ничего не затрёт.
+// Редактор тайтла (админ): загрузка, создание и сохранение карточки.
+// Публикация/снятие/удаление (фича title-moderation) и серии (фича episode-editor)
+// меняют тот же тайтл — их результат и ошибки редактор показывает через extraReducers.
+// Каждое изменение несёт revision: если тайтл успели поправить в другой вкладке,
+// сервер ответит 409 и ничего не затрёт.
 import { createAsyncThunk, createSlice, isAnyOf } from '@reduxjs/toolkit';
-import { api, type EpisodeIn } from '@/shared/api/endpoints';
+import { api } from '@/shared/api/endpoints';
+import { deleteTitle, publishTitle, withdrawTitle } from '@/features/title-moderation';
+import { deleteEpisode, saveEpisode } from '@/features/episode-editor';
 import type { Title, TitleFields } from '@/shared/api/types';
 import { createApiThunk, problemText } from '@/shared/lib/request';
 import type { RootState } from '@/shared/lib/redux';
@@ -24,31 +29,6 @@ export const saveTitle = createApiThunk(
   'titleEdit/save',
   ({ id, ...b }: TitleFields & { id: string; revision: number }) => api.editTitle(id, b),
 );
-export const publishTitle = createApiThunk('titleEdit/publish', (t: Title) =>
-  api.publishTitle(t.id, t.revision),
-);
-export const withdrawTitle = createApiThunk(
-  'titleEdit/withdraw',
-  ({ t, reason }: { t: Title; reason: string }) => api.withdrawTitle(t.id, t.revision, reason),
-);
-export const deleteTitle = createApiThunk('titleEdit/delete', (id: string) => api.deleteTitle(id));
-// Серии меняют их список (и счётчик) — перечитываем тайтл целиком, чтобы взять новую ревизию.
-export const saveEpisode = createApiThunk(
-  'titleEdit/saveEpisode',
-  async ({ titleId, ep }: { titleId: string; ep: EpisodeIn }, { dispatch }) => {
-    const r = await api.saveEpisode(titleId, ep);
-    void dispatch(loadTitle(titleId));
-    return r;
-  },
-);
-export const deleteEpisode = createApiThunk(
-  'titleEdit/deleteEpisode',
-  async ({ titleId, id }: { titleId: string; id: string }, { dispatch }) => {
-    await api.deleteEpisode(titleId, id);
-    void dispatch(loadTitle(titleId));
-  },
-);
-
 /** Любое изменение тайтла или серий. */
 const mutationPending = isAnyOf(
   createTitle.pending,
@@ -119,6 +99,14 @@ export const { editClosed } = titleEditSlice.actions;
 export const editOpened = createAsyncThunk('titleEdit/opened', async (id: string | null, { dispatch }) => {
   if (id !== null) await dispatch(loadTitle(id));
 });
+
+/** Перечитать открытый тайтл (после изменения серий — у него новая ревизия). */
+export const titleReloaded = createAsyncThunk(
+  'titleEdit/reloaded',
+  async (id: string, { dispatch, getState }) => {
+    if ((getState() as RootState).titleEdit.title?.id === id) await dispatch(loadTitle(id));
+  },
+);
 
 export const selectTitleEdit = (s: RootState) => s.titleEdit;
 

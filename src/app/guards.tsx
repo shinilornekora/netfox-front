@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
-import { hasRole, selectRole, selectStatus } from '@/entities/session/model';
+import { hasRole, selectRole, selectStatus } from '@/entities/session';
 import { useAppSelector } from '@/shared/lib/redux';
 import type { Role } from '@/shared/api/types';
 import { Spinner } from '@/shared/ui';

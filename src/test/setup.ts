@@ -3,7 +3,7 @@ import { cleanup } from '@testing-library/react';
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll } from 'vitest';
 import { __resetClient } from '@/shared/api/client';
-import { pollDelay } from '@/features/checkout/model';
+import { pollDelay } from '@/features/checkout';
 import { handlers, resetDb } from './gateway';
 
 export const server = setupServer(...handlers);

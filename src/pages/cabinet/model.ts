@@ -5,7 +5,8 @@ import { api } from '@/shared/api/endpoints';
 import type { Device, HistoryPage, Wallet } from '@/shared/api/types';
 import { addRequestCases, createApiThunk, idle, problemText, type RequestState } from '@/shared/lib/request';
 import type { RootState } from '@/shared/lib/redux';
-import { sessionLost } from '@/entities/session/model';
+import { autoRenewToggled } from '@/features/subscription-autorenew';
+import { deviceRevoked } from '@/features/device-revoke';
 
 export type Tab = 'subscription' | 'purchases' | 'orders' | 'history' | 'devices';
 
@@ -34,24 +35,6 @@ const initialState: CabinetState = {
 export const walletRequested = createApiThunk('cabinet/wallet', () => api.wallet());
 export const devicesRequested = createApiThunk('cabinet/devices', () => api.devices());
 export const historyRequested = createApiThunk('cabinet/history', (c: HistoryPage['next']) => api.history(c));
-export const autoRenewToggled = createApiThunk(
-  'cabinet/autoRenew',
-  async (enabled: boolean, { dispatch }) => {
-    const r = await api.autoRenew(enabled);
-    await dispatch(walletRefreshed());
-    return r;
-  },
-);
-export const deviceRevoked = createApiThunk(
-  'cabinet/revoke',
-  async (d: { id: string; current: boolean }, { dispatch }) => {
-    await api.revokeDevice(d.id);
-    // Завершили текущую сессию — это выход.
-    if (d.current) dispatch(sessionLost());
-    else await dispatch(devicesRequested());
-    return d;
-  },
-);
 
 export const cabinetSlice = createSlice({
   name: 'cabinet',
@@ -68,6 +51,7 @@ export const cabinetSlice = createSlice({
       s.actionError = null;
     },
   },
+  // Автопродление и завершение сеанса — фичи; кабинет показывает их ошибку и «идёт запрос».
   extraReducers: (b) => {
     b.addCase(historyRequested.fulfilled, (s, a) => {
       s.history = a.meta.arg.before ? [...s.history, ...a.payload.items] : a.payload.items;

@@ -4,6 +4,7 @@ import { api } from '@/shared/api/endpoints';
 import type { Order, OrderStatus, Plan, Revenue } from '@/shared/api/types';
 import { addRequestCases, createApiThunk, idle, problemText, type RequestState } from '@/shared/lib/request';
 import type { RootState } from '@/shared/lib/redux';
+import { refunded } from '@/features/order-refund';
 
 type OrdersPage = Awaited<ReturnType<typeof api.adminOrders>>;
 
@@ -33,17 +34,6 @@ export const ordersRequested = createApiThunk('sales/orders', (_: void, { getSta
   api.adminOrders({ status: (getState() as RootState).sales.status }),
 );
 const nextPage = createApiThunk('sales/more', (q: { status: string; before: string }) => api.adminOrders(q));
-
-/** Возврат: после него перечитываем выручку и заказы. */
-export const refunded = createApiThunk(
-  'sales/refund',
-  async ({ id, reason }: { id: string; reason: string }, { dispatch }) => {
-    const r = await api.refundOrder(id, reason);
-    void dispatch(revenueRequested());
-    void dispatch(ordersRequested());
-    return r;
-  },
-);
 
 export const salesSlice = createSlice({
   name: 'sales',
@@ -83,6 +73,11 @@ export const statusChanged = createAsyncThunk(
     await dispatch(ordersRequested());
   },
 );
+
+/** После возврата (фича order-refund) — перечитать выручку и заказы. */
+export const salesRefreshed = createAsyncThunk('sales/refreshed', async (_: void, { dispatch }) => {
+  await Promise.all([dispatch(revenueRequested()), dispatch(ordersRequested())]);
+});
 
 export const moreRequested = createAsyncThunk(
   'sales/moreRequested',

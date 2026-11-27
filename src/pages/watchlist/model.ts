@@ -4,6 +4,7 @@ import { api } from '@/shared/api/endpoints';
 import type { WatchItem, WithTitle } from '@/shared/api/types';
 import { createApiThunk, problemText } from '@/shared/lib/request';
 import type { RootState } from '@/shared/lib/redux';
+import { setWatch } from '@/features/watchlist-toggle';
 
 export interface WatchlistState {
   items: WithTitle<WatchItem>[];
@@ -14,10 +15,6 @@ export interface WatchlistState {
 const initialState: WatchlistState = { items: [], pending: false, error: null };
 
 export const watchlistOpened = createApiThunk('watchlist/list', () => api.watchlist());
-export const removed = createApiThunk('watchlist/remove', async (id: string) => {
-  await api.setWatch(id, false);
-  return id;
-});
 
 export const watchlistSlice = createSlice({
   name: 'watchlist',
@@ -37,8 +34,9 @@ export const watchlistSlice = createSlice({
         s.pending = false;
         s.error = problemText(a);
       })
-      .addCase(removed.fulfilled, (s, a) => {
-        s.items = s.items.filter((i) => i.title_id !== a.payload);
+      // «Убрать» — фича watchlist-toggle.
+      .addCase(setWatch.fulfilled, (s, a) => {
+        if (!a.meta.arg.on) s.items = s.items.filter((i) => i.title_id !== a.meta.arg.id);
       }),
 });
 
