@@ -1,18 +1,16 @@
-import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { selectRole } from '@/entities/session/model';
 import { useAppDispatch, useAppSelector } from '@/shared/lib/redux';
 import { opened as checkoutOpened } from '@/features/checkout/model';
 import { formatDate, formatMoney, plural } from '@/shared/lib/format';
 import { Alert, Button, Card, Spinner } from '@/shared/ui';
+import { usePageModel } from '@/shared/lib/hooks';
 import * as m from './model';
+import { RoutePath } from '@/shared/constants';
 
 export default function PlansPage() {
   const dispatch = useAppDispatch();
-  useEffect(() => {
-    void dispatch(m.plansOpened());
-    return () => void dispatch(m.plansClosed());
-  }, [dispatch]);
+  usePageModel(m.plansOpened, m.plansClosed);
   const plans = useAppSelector(m.selectPlans);
   const error = useAppSelector(m.selectPlansError);
   const sub = useAppSelector(m.selectSubscription);
@@ -49,7 +47,7 @@ export default function PlansPage() {
                   {p.period_days > 31 ? ` · ≈ ${formatMoney(perMonth)} в месяц` : ''}
                 </p>
                 {role === null && (
-                  <Link to="/login" state={{ from: '/plans' }} className="neu-btn primary">
+                  <Link to={RoutePath.login} state={{ from: RoutePath.plans }} className="neu-btn primary">
                     Войти и оформить
                   </Link>
                 )}

@@ -1,32 +1,15 @@
 // Маршруты приложения: объект-конфиг для createBrowserRouter (data router).
 // В тестах тот же массив отдаётся в createMemoryRouter.
+// Сами пути (RoutePath) лежат в shared/constants — ими пользуются и меню, и ссылки.
 import { lazy, useEffect } from 'react';
 import type { RouteObject } from 'react-router-dom';
 import { restoreSession, sessionLost } from '@/entities/session/model';
 import { useAppDispatch } from '@/shared/lib/redux';
 import { onUnauthorized } from '@/shared/api/client';
+import { RoutePath } from '@/shared/constants';
 import { ErrorPage, ForbiddenPage, NotFoundPage } from '@/pages/not-found';
 import { GuestOnly, RequireAuth, RequireRole } from './guards';
 import { Layout } from './Layout';
-
-/** Все пути приложения в одном месте. */
-export const RoutePath = {
-  catalog: '/',
-  title: '/title/:id',
-  watch: '/watch/:id',
-  plans: '/plans',
-  login: '/login',
-  register: '/register',
-  forbidden: '/forbidden',
-  cabinet: '/cabinet',
-  profile: '/cabinet/profile',
-  watchlist: '/watchlist',
-  adminTitles: '/admin/titles',
-  titleNew: '/admin/titles/new',
-  titleEdit: '/admin/titles/:id',
-  sales: '/admin/sales',
-  notFound: '*',
-} as const;
 
 // Каждая страница — отдельный чанк: админку зритель не скачивает.
 const CatalogPage = lazy(() => import(/* webpackChunkName: "page-catalog" */ '@/pages/catalog'));

@@ -1,16 +1,18 @@
-import { useEffect, type FormEvent } from 'react';
+import { type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import type { TitleStatus } from '@/shared/api/types';
 import { formatDateTime, formatMoney, kindLabel, titleStatusLabel } from '@/shared/lib/format';
 import { useAppDispatch, useAppSelector } from '@/shared/lib/redux';
 import { Alert, Badge, Button, Card, Empty, Select, Spinner, TextField } from '@/shared/ui';
+import { usePageModel } from '@/shared/lib/hooks';
 import * as m from './model';
+import { RoutePath, pathTo } from '@/shared/constants';
 
 const tone = { draft: 'info', published: 'ok', withdrawn: 'warn' } as const;
 
 export default function AdminTitlesPage() {
   const dispatch = useAppDispatch();
-  useEffect(() => void dispatch(m.adminTitlesOpened()), [dispatch]);
+  usePageModel(m.adminTitlesOpened);
   const { filter, list, items, cursor } = useAppSelector(m.selectAdminTitles);
   const { data, pending, error } = list;
   const change = (p: Partial<m.AdminFilter>) => dispatch(m.filterChanged(p));
@@ -25,7 +27,7 @@ export default function AdminTitlesPage() {
     <div className="page stack">
       <div className="row-between">
         <h1>Каталог</h1>
-        <Link to="/admin/titles/new" className="neu-btn primary">
+        <Link to={RoutePath.titleNew} className="neu-btn primary">
           + Новый тайтл
         </Link>
       </div>
@@ -74,7 +76,7 @@ export default function AdminTitlesPage() {
               {items.map((t) => (
                 <tr key={t.id}>
                   <td data-label="Название">
-                    <Link to={`/admin/titles/${t.id}`}>{t.name}</Link> <span className="muted">{t.year}</span>
+                    <Link to={pathTo.titleEdit(t.id)}>{t.name}</Link> <span className="muted">{t.year}</span>
                   </td>
                   <td data-label="Тип">{kindLabel[t.kind]}</td>
                   <td data-label="Доступ">

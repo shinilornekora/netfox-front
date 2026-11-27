@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { selectRole } from '@/entities/session/model';
 import { useAppDispatch, useAppSelector } from '@/shared/lib/redux';
@@ -15,15 +14,14 @@ import {
   titleStatusLabel,
 } from '@/shared/lib/format';
 import { Alert, Badge, Button, Card, ProgressBar, Spinner } from '@/shared/ui';
+import { usePageModel } from '@/shared/lib/hooks';
 import * as m from './model';
+import { RoutePath, pathTo, type IdParams } from '@/shared/constants';
 
 export default function TitlePage() {
-  const { id = '' } = useParams();
+  const { id = '' } = useParams<IdParams>();
   const dispatch = useAppDispatch();
-  useEffect(() => {
-    void dispatch(m.titleOpened(id));
-    return () => void dispatch(m.titleClosed());
-  }, [dispatch, id]);
+  usePageModel(m.titleOpened, m.titleClosed, id);
   const location = useLocation();
   const view = useAppSelector(m.selectView);
   const role = useAppSelector(selectRole);
@@ -76,19 +74,19 @@ export default function TitlePage() {
 
           <section className="row" aria-label="Доступ">
             {role === null && (
-              <Link to="/login" state={{ from: location.pathname }} className="neu-btn primary">
+              <Link to={RoutePath.login} state={{ from: location.pathname }} className="neu-btn primary">
                 Войти, чтобы смотреть
               </Link>
             )}
             {role === 'admin' && (
-              <Link to={`/admin/titles/${t.id}`} className="neu-btn primary">
+              <Link to={pathTo.titleEdit(t.id)} className="neu-btn primary">
                 Редактировать
               </Link>
             )}
             {role === 'viewer' &&
               actions.map((a) =>
                 a.type === 'watch' ? (
-                  <Link key="watch" to={`/watch/${t.id}`} className="neu-btn primary">
+                  <Link key="watch" to={pathTo.watch(t.id)} className="neu-btn primary">
                     {progress && !progress.finished ? 'Продолжить' : 'Смотреть'}
                   </Link>
                 ) : a.type === 'buy' ? (
@@ -107,7 +105,7 @@ export default function TitlePage() {
                     Купить навсегда за {formatMoney(a.price)}
                   </Button>
                 ) : a.type === 'subscribe' ? (
-                  <Link key="sub" to="/plans" className="neu-btn primary">
+                  <Link key="sub" to={RoutePath.plans} className="neu-btn primary">
                     Оформить подписку
                   </Link>
                 ) : (
@@ -150,7 +148,7 @@ export default function TitlePage() {
                   </span>
                   {role === 'viewer' && watchAction && (
                     <Link
-                      to={`/watch/${t.id}?ep=${e.id}`}
+                      to={pathTo.watch(t.id, e.id)}
                       className="neu-btn small"
                       aria-label={`Смотреть: ${e.name}`}
                     >

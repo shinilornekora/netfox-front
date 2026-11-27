@@ -4,6 +4,7 @@ import { register as registerThunk } from '@/entities/session/model';
 import { useAppDispatch, useAppSelector } from '@/shared/lib/redux';
 import { Alert, Button, Card, TextField } from '@/shared/ui';
 import * as m from './model';
+import { RoutePath } from '@/shared/constants';
 
 export default function RegisterPage() {
   const [form, setForm] = useState({ email: '', password: '', display_name: '', birth_date: '' });
@@ -70,7 +71,7 @@ export default function RegisterPage() {
             {pending ? 'Создаём…' : 'Создать аккаунт'}
           </Button>
           <p className="muted">
-            Уже есть аккаунт? <Link to="/login">Войдите</Link>
+            Уже есть аккаунт? <Link to={RoutePath.login}>Войдите</Link>
           </p>
         </form>
       </Card>

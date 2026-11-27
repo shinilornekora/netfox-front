@@ -1,5 +1,6 @@
 import { Link, isRouteErrorResponse, useRouteError } from 'react-router-dom';
 import { Card } from '@/shared/ui';
+import { RoutePath } from '@/shared/constants';
 
 export function NotFoundPage() {
   return (
@@ -7,7 +8,7 @@ export function NotFoundPage() {
       <Card>
         <h1>404</h1>
         <p className="muted">Такой страницы нет.</p>
-        <Link to="/">На главную</Link>
+        <Link to={RoutePath.catalog}>На главную</Link>
       </Card>
     </div>
   );
@@ -19,7 +20,7 @@ export function ForbiddenPage() {
       <Card>
         <h1>Нет доступа</h1>
         <p className="muted">Этот раздел недоступен для вашей роли.</p>
-        <Link to="/">На главную</Link>
+        <Link to={RoutePath.catalog}>На главную</Link>
       </Card>
     </div>
   );

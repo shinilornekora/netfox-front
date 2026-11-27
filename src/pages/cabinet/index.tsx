@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { selectUser } from '@/entities/session/model';
 import { useAppDispatch, useAppSelector } from '@/shared/lib/redux';
@@ -11,14 +10,13 @@ import {
   orderTone,
 } from '@/shared/lib/format';
 import { Alert, Badge, Button, Card, Empty, Spinner, Stat, Tabs } from '@/shared/ui';
+import { usePageModel } from '@/shared/lib/hooks';
 import * as m from './model';
+import { RoutePath, pathTo } from '@/shared/constants';
 
 export default function CabinetPage() {
   const dispatch = useAppDispatch();
-  useEffect(() => {
-    void dispatch(m.cabinetOpened());
-    return () => void dispatch(m.cabinetClosed());
-  }, [dispatch]);
+  usePageModel(m.cabinetOpened, m.cabinetClosed);
   const user = useAppSelector(selectUser);
   const c = useAppSelector(m.selectCabinet);
   const { tab, history, historyNext: next, actionError, renewPending } = c;
@@ -38,7 +36,7 @@ export default function CabinetPage() {
           <h1>Личный кабинет</h1>
           <p className="muted">{user?.display_name}</p>
         </div>
-        <Link to="/cabinet/profile" className="neu-btn small">
+        <Link to={RoutePath.profile} className="neu-btn small">
           Профиль и пароль
         </Link>
       </div>
@@ -85,7 +83,7 @@ export default function CabinetPage() {
           </Card>
         ) : (
           <Empty>
-            Подписки нет. <Link to="/plans">Выбрать тариф</Link>
+            Подписки нет. <Link to={RoutePath.plans}>Выбрать тариф</Link>
           </Empty>
         )
       ) : tab === 'purchases' ? (
@@ -96,14 +94,14 @@ export default function CabinetPage() {
             {wallet.purchases.map((p) => (
               <Card key={p.title_id} as="article" className="row-between">
                 <div>
-                  <Link to={`/title/${p.title_id}`}>
+                  <Link to={pathTo.title(p.title_id)}>
                     <b>{p.title_name}</b>
                   </Link>
                   <div className="muted">
                     Куплен {formatDate(p.purchased_at)} за {formatMoney(p.amount_kopecks)}
                   </div>
                 </div>
-                <Link to={`/watch/${p.title_id}`} className="neu-btn small primary">
+                <Link to={pathTo.watch(p.title_id)} className="neu-btn small primary">
                   Смотреть
                 </Link>
               </Card>
@@ -150,7 +148,7 @@ export default function CabinetPage() {
             {history.map((h) => (
               <Card key={h.id} as="article" className="row-between">
                 <div>
-                  <Link to={`/title/${h.title_id}`}>
+                  <Link to={pathTo.title(h.title_id)}>
                     <b>{h.title.name}</b>
                   </Link>
                   <div className="muted">

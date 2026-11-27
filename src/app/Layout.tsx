@@ -6,6 +6,7 @@ import { CheckoutModal } from '@/features/checkout/CheckoutModal';
 import { roleLabel } from '@/shared/lib/format';
 import { Button, Spinner } from '@/shared/ui';
 import { SidebarSlot } from './sidebarSlot';
+import { RoutePath } from '@/shared/constants';
 
 function Logo() {
   return (
@@ -44,7 +45,7 @@ export function Layout() {
   return (
     <div className="shell">
       <header className="topbar">
-        <NavLink to="/" className="logo" aria-hidden tabIndex={-1}>
+        <NavLink to={RoutePath.catalog} className="logo" aria-hidden tabIndex={-1}>
           <Logo />
         </NavLink>
         <button
@@ -63,7 +64,7 @@ export function Layout() {
 
       <aside id="sidebar" className={`sidebar${open ? ' open' : ''}`}>
         <div className="sidebar-head">
-          <NavLink to="/" className="logo" aria-label="Netfox — на главную">
+          <NavLink to={RoutePath.catalog} className="logo" aria-label="Netfox — на главную">
             <Logo />
           </NavLink>
           <button
@@ -77,22 +78,22 @@ export function Layout() {
         </div>
 
         <nav className="nav" aria-label="Основная навигация">
-          <NavLink to="/" end>
+          <NavLink to={RoutePath.catalog} end>
             Каталог
           </NavLink>
-          <NavLink to="/plans">Подписка</NavLink>
+          <NavLink to={RoutePath.plans}>Подписка</NavLink>
           {role === 'viewer' && (
             <>
-              <NavLink to="/watchlist">Смотреть позже</NavLink>
-              <NavLink to="/cabinet" end>
+              <NavLink to={RoutePath.watchlist}>Смотреть позже</NavLink>
+              <NavLink to={RoutePath.cabinet} end>
                 Кабинет
               </NavLink>
             </>
           )}
           {role === 'admin' && (
             <>
-              <NavLink to="/admin/titles">Управление каталогом</NavLink>
-              <NavLink to="/admin/sales">Продажи</NavLink>
+              <NavLink to={RoutePath.adminTitles}>Управление каталогом</NavLink>
+              <NavLink to={RoutePath.sales}>Продажи</NavLink>
             </>
           )}
         </nav>
@@ -101,7 +102,7 @@ export function Layout() {
 
         {user ? (
           <div className="sidebar-user neu-inset">
-            <NavLink to="/cabinet/profile" className="user-name" title={roleLabel[user.role]}>
+            <NavLink to={RoutePath.profile} className="user-name" title={roleLabel[user.role]}>
               {user.display_name || user.email}
             </NavLink>
             <div className="muted user-role">{roleLabel[user.role]}</div>
@@ -109,7 +110,7 @@ export function Layout() {
               <Button
                 small
                 onClick={() => {
-                  void dispatch(logout()).finally(() => navigate('/'));
+                  void dispatch(logout()).finally(() => navigate(RoutePath.catalog));
                 }}
               >
                 Выйти
@@ -118,10 +119,10 @@ export function Layout() {
           </div>
         ) : (
           <div className="row" style={{ gap: 8 }}>
-            <NavLink to="/login" className="neu-btn small">
+            <NavLink to={RoutePath.login} className="neu-btn small">
               Войти
             </NavLink>
-            <NavLink to="/register" className="neu-btn small primary">
+            <NavLink to={RoutePath.register} className="neu-btn small primary">
               Регистрация
             </NavLink>
           </div>
